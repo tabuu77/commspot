@@ -13,7 +13,7 @@ namespace CommSpot.Client.Core;
 /// Everything except the actual sound card: TLS control channel, encrypted UDP voice, Opus, mixing.
 /// The desktop app feeds it mic frames and pulls speaker frames; tests feed it synthetic audio.
 /// </summary>
-public sealed class VoiceClient : IAsyncDisposable
+public sealed class VoiceClient : IAsyncDisposable, IAudioSink
 {
     private readonly ConcurrentDictionary<int, Member> _members = new();
     private readonly ConcurrentDictionary<int, Peer> _peers = new();
@@ -36,8 +36,11 @@ public sealed class VoiceClient : IAsyncDisposable
     public bool Deafened { get; set; }
     public VoiceActivity Activity => _vad;
 
+    /// <summary>Mic/speaker volume, meter and loopback. Can be shared with the settings window.</summary>
+    public MicProcessor Mic { get; set; } = new();
+
     /// <summary>Keep sending this long after the push-to-talk key is released, so word endings aren't cut.</summary>
-    public const int PushToTalkReleaseMs = 200;
+    public int PushToTalkReleaseMs { get; set; } = 200;
     private volatile bool _pttHeld;
     private long _pttReleasedAt;
 
@@ -165,13 +168,19 @@ public sealed class VoiceClient : IAsyncDisposable
     /// <summary>Feed exactly one 20 ms mono frame (960 samples at 48 kHz) from the microphone.</summary>
     public void SubmitMicFrame(ReadOnlySpan<short> frame)
     {
-        if (!Connected || Muted || _encoder is null || frame.Length != VoiceConstants.FrameSamples)
+        if (frame.Length != VoiceConstants.FrameSamples)
+        {
+            return;
+        }
+        Span<short> pcm = stackalloc short[frame.Length];
+        Mic.Process(frame, pcm); // volume, meter, hear-yourself
+        if (!Connected || Muted || _encoder is null)
         {
             return;
         }
         bool send = PushToTalk
             ? _pttHeld || Environment.TickCount64 - Interlocked.Read(ref _pttReleasedAt) < PushToTalkReleaseMs
-            : _vad.IsVoice(frame);
+            : _vad.IsVoice(pcm);
         if (!send)
         {
             return;
@@ -181,7 +190,7 @@ public sealed class VoiceClient : IAsyncDisposable
         int len;
         lock (_sendGate)
         {
-            len = _encoder.Encode(frame, VoiceConstants.FrameSamples, opus, opus.Length);
+            len = _encoder.Encode(pcm, VoiceConstants.FrameSamples, opus, opus.Length);
         }
         if (len > 0)
         {
@@ -198,7 +207,7 @@ public sealed class VoiceClient : IAsyncDisposable
             return;
         }
         Span<int> acc = stackalloc int[output.Length];
-        bool any = false;
+        bool any = Mic.MixLoopback(acc);
         foreach (var peer in _peers.Values)
         {
             var f = peer.Buffer.Pop();
@@ -216,10 +225,7 @@ public sealed class VoiceClient : IAsyncDisposable
         {
             return;
         }
-        for (int i = 0; i < output.Length; i++)
-        {
-            output[i] = (short)Math.Clamp(acc[i], short.MinValue, short.MaxValue);
-        }
+        Mic.WriteOut(acc, output);
     }
 
     private void SendSealed(ReadOnlySpan<byte> payload)

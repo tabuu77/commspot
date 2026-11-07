@@ -6,11 +6,11 @@ using PortAudioSharp;
 
 namespace CommSpot.Client;
 
-/// <summary>Sound card glue: mic -> VoiceClient (on a worker thread), VoiceClient -> speakers.</summary>
+/// <summary>Sound card glue: mic -> sink (on a worker thread), sink -> speakers. The sink is a call or the mic test.</summary>
 internal sealed class AudioEngine : IDisposable
 {
     private static bool _initialized;
-    private readonly VoiceClient _client;
+    private readonly IAudioSink _client;
     private readonly Channel<short[]> _micFrames = Channel.CreateBounded<short[]>(
         new BoundedChannelOptions(10) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly short[] _micAccum = new short[VoiceConstants.FrameSamples];
@@ -23,7 +23,7 @@ internal sealed class AudioEngine : IDisposable
     private readonly PortAudioSharp.Stream.Callback _inCb;
     private readonly PortAudioSharp.Stream.Callback _outCb;
 
-    public AudioEngine(VoiceClient client)
+    public AudioEngine(IAudioSink client)
     {
         _client = client;
         _inCb = OnInput;

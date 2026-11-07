@@ -113,7 +113,7 @@ public sealed class EndToEndTests : IAsyncLifetime
         Assert.True(await TalkAndListen(a, b) > 2000, "Bob should hear Alice while the key is held.");
 
         a.PushToTalkHeld = false;
-        await Task.Delay(VoiceClient.PushToTalkReleaseMs + 300);
+        await Task.Delay(a.PushToTalkReleaseMs + 300);
         var drain = new short[VoiceConstants.FrameSamples];
         for (int i = 0; i < 20; i++)
         {

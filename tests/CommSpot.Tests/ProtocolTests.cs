@@ -81,3 +81,47 @@ public class ProtocolTests
     [InlineData("123456789012345678901234567890123", false)]
     public void DisplayNames_Validate(string raw, bool ok) => Assert.Equal(ok, DisplayNames.TryNormalize(raw, out _));
 }
+
+public sealed class MicProcessorTests
+{
+    [Fact]
+    public void Gain_ScalesAndClips_AndMeterMoves()
+    {
+        var mic = new CommSpot.Client.Core.MicProcessor { Gain = 2 };
+        short[] input = [1000, -1000, 30000, -30000];
+        var output = new short[4];
+        mic.Process(input, output);
+        Assert.Equal(new short[] { 2000, -2000, short.MaxValue, short.MinValue }, output);
+        Assert.True(mic.Level > 0.5);
+        mic.Gain = 0;
+        mic.Process(input, output);
+        Assert.All(output, s => Assert.Equal(0, s));
+        Assert.Equal(0, mic.Level);
+    }
+
+    [Fact]
+    public void MicTest_LoopsBackOnlyWhenEnabled()
+    {
+        var test = new CommSpot.Client.Core.MicTest(new CommSpot.Client.Core.MicProcessor { SpeakerGain = 0.5 });
+        var frame = Enumerable.Repeat((short)4000, 960).ToArray();
+        var outFrame = new short[960];
+        for (int i = 0; i < 5; i++) test.SubmitMicFrame(frame);
+        test.ReadSpeakerFrame(outFrame);
+        Assert.All(outFrame, s => Assert.Equal(0, s));
+        test.Mic.Loopback = true;
+        for (int i = 0; i < 5; i++) test.SubmitMicFrame(frame);
+        test.ReadSpeakerFrame(outFrame);
+        Assert.All(outFrame, s => Assert.Equal(2000, s));
+    }
+
+    [Fact]
+    public void AutoSensitivity_FollowsNoiseFloor()
+    {
+        var vad = new CommSpot.Client.Core.VoiceActivity { Auto = true };
+        var quiet = Enumerable.Repeat((short)100, 960).ToArray();
+        for (int i = 0; i < 300; i++) vad.IsVoice(quiet);
+        Assert.InRange(vad.Threshold, 250, 450); // ~3x a noise floor of 100
+        var speech = Enumerable.Range(0, 960).Select(i => (short)(i % 2 == 0 ? 3000 : -3000)).ToArray();
+        Assert.True(vad.IsVoice(speech));
+    }
+}

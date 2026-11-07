@@ -9,30 +9,32 @@ using PortAudioSharp;
 namespace CommSpot.Client;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "Audio and client are disposed in LeaveAsync, which runs on window Closing.")]
-public partial class MainWindow : Window
+public partial class MainWindow : Window, ISettingsHost
 {
     private readonly Settings _settings = Settings.Load();
-    private List<(int Index, string Name)> _mics = [];
-    private List<(int Index, string Name)> _speakers = [];
+    private readonly MicProcessor _mic = new();
     private VoiceClient? _client;
     private AudioEngine? _audio;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(120) };
     private readonly GlobalInput? _input = GlobalInput.Create();
     private readonly PushToTalkWatcher? _ptt;
-    private readonly DispatcherTimer _capture = new() { Interval = TimeSpan.FromMilliseconds(15) };
-    private bool _captureArmed;
-    private long _captureEnds;
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
     private UpdateOffer? _offer;
+    private SettingsWindow? _settingsWindow;
+
+    Settings ISettingsHost.Settings => _settings;
+
+    MicProcessor ISettingsHost.Mic => _mic;
+
+    GlobalInput? ISettingsHost.Input => _input;
+
+    bool ISettingsHost.InCall => _client is not null;
 
     public MainWindow()
     {
         InitializeComponent();
         ServerBox.Text = _settings.Server;
         NameBox.Text = _settings.Name;
-        LoadDevices();
-        SensitivitySlider.Value = _settings.Sensitivity;
-        VoiceModeBox.SelectedIndex = _settings.PushToTalk ? 1 : 0;
         if (_input is not null)
         {
             _ptt = new PushToTalkWatcher(_input, held =>
@@ -43,15 +45,7 @@ public partial class MainWindow : Window
                 }
             });
         }
-        ApplyVoiceMode();
-        VoiceModeBox.SelectionChanged += (_, _) =>
-        {
-            _settings.PushToTalk = VoiceModeBox.SelectedIndex == 1;
-            _settings.Save();
-            ApplyVoiceMode();
-        };
-        PttKeyButton.Click += (_, _) => StartCapture();
-        _capture.Tick += (_, _) => CaptureTick();
+        ApplySettings();
 
         Title = $"CommSpot {SelfUpdate.Current.ToString(3)}";
         SelfUpdate.CleanupOld();
@@ -63,24 +57,15 @@ public partial class MainWindow : Window
             await CheckForUpdateAsync();
         };
 
+        SettingsButton.Click += (_, _) => OpenSettings();
         JoinButton.Click += OnJoin;
         MuteButton.Click += OnMute;
         DeafenButton.Click += OnDeafen;
         LeaveButton.Click += async (_, _) => await LeaveAsync(null);
-        SensitivitySlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == Slider.ValueProperty && _client is not null)
-            {
-                _client.Activity.Threshold = SensitivitySlider.Value;
-            }
-            if (e.Property == Slider.ValueProperty)
-            {
-                _settings.Sensitivity = SensitivitySlider.Value;
-            }
-        };
         _refresh.Tick += (_, _) => RenderMembers();
         Closing += async (_, _) =>
         {
+            _settingsWindow?.Close();
             _settings.Save();
             await LeaveAsync(null);
         };
@@ -89,6 +74,94 @@ public partial class MainWindow : Window
             _ptt?.Dispose();
             _input?.Dispose();
         };
+    }
+
+    private void OpenSettings()
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+        _settingsWindow = new SettingsWindow(this);
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show(this);
+    }
+
+    /// <summary>Pushes saved settings into the mic processor, the push-to-talk watcher and the live call.</summary>
+    private void ApplySettings()
+    {
+        _mic.Gain = _settings.MicVolume;
+        _mic.SpeakerGain = _settings.SpeakerVolume;
+        if (_ptt is not null)
+        {
+            _ptt.Binding = _settings.PushToTalk ? _settings.PushToTalkKey : null;
+        }
+        if (_client is { } c)
+        {
+            c.PushToTalk = _settings.PushToTalk;
+            c.PushToTalkReleaseMs = Math.Clamp(_settings.PushToTalkReleaseMs, 0, 1000);
+            c.Activity.Auto = _settings.AutoSensitivity;
+            if (!_settings.AutoSensitivity)
+            {
+                c.Activity.Threshold = _settings.Sensitivity;
+            }
+        }
+        ModeHint.Text = _settings.PushToTalk
+            ? _settings.PushToTalkKey is { } k && _input is not null
+                ? $"Push to talk: hold {_input.Describe(k)} to talk."
+                : "Push to talk is on, but no key is set. Open Settings to pick one."
+            : "Voice activity: your mic sends when you speak.";
+    }
+
+    void ISettingsHost.SettingsChanged() => ApplySettings();
+
+    void ISettingsHost.DevicesChanged()
+    {
+        if (_client is { } c)
+        {
+            StartAudio(c);
+        }
+    }
+
+    async Task<string> ISettingsHost.CheckForUpdatesNowAsync()
+    {
+        if (!SelfUpdate.Supported)
+        {
+            return "Updates only work in the downloaded app.";
+        }
+        await CheckForUpdateAsync();
+        return _offer is null ? "You're up to date." : $"Version {_offer.Version.ToString(3)} is ready. Use the gold button in the main window.";
+    }
+
+    private static int ResolveDevice(bool input, string? saved)
+    {
+        var list = AudioEngine.Devices(input);
+        foreach (var d in list)
+        {
+            if (d.Name == saved)
+            {
+                return d.Index;
+            }
+        }
+        int def = AudioEngine.DefaultDevice(input);
+        return def != PortAudio.NoDevice ? def : list.Count > 0 ? list[0].Index : PortAudio.NoDevice;
+    }
+
+    private void StartAudio(VoiceClient client)
+    {
+        _audio?.Dispose();
+        _audio = null;
+        try
+        {
+            _audio = new AudioEngine(client);
+            _audio.Start(ResolveDevice(true, _settings.Mic), ResolveDevice(false, _settings.Speaker));
+            StatusText.Text = string.Empty;
+        }
+        catch (Exception ex) when (ex is PortAudioException or DllNotFoundException or TypeInitializationException)
+        {
+            StatusText.Text = "Joined, but the audio device failed: " + ex.Message;
+        }
     }
 
     private async Task CheckForUpdateAsync()
@@ -134,109 +207,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyVoiceMode()
-    {
-        bool ptt = _settings.PushToTalk;
-        VadPanel.IsVisible = !ptt;
-        PttPanel.IsVisible = ptt;
-        if (_input is null)
-        {
-            PttKeyButton.IsEnabled = false;
-            PttKeyButton.Content = "Push-to-talk isn't available on this system";
-        }
-        else if (!_captureArmed && _capture.IsEnabled is false)
-        {
-            PttKeyButton.Content = _settings.PushToTalkKey is { } k ? $"{_input.Describe(k)}  (click to change)" : "Set key";
-        }
-        if (_ptt is not null)
-        {
-            _ptt.Binding = ptt ? _settings.PushToTalkKey : null;
-        }
-        if (_client is { } c)
-        {
-            c.PushToTalk = ptt;
-        }
-    }
-
-    private void StartCapture()
-    {
-        if (_input is null)
-        {
-            return;
-        }
-        if (_ptt is not null)
-        {
-            _ptt.Binding = null; // don't transmit while picking
-        }
-        _captureArmed = false;
-        _captureEnds = Environment.TickCount64 + 10_000;
-        PttKeyButton.Content = "Press a key or mouse button...  (Esc cancels)";
-        _capture.Start();
-    }
-
-    private void CaptureTick()
-    {
-        string? pressed = _input!.FindPressed();
-        if (!_captureArmed)
-        {
-            _captureArmed = pressed is null; // wait until everything is released first
-        }
-        else if (pressed is not null)
-        {
-            if (!_input.IsEscape(pressed))
-            {
-                _settings.PushToTalkKey = pressed;
-                _settings.Save();
-            }
-            StopCapture();
-            return;
-        }
-        if (Environment.TickCount64 > _captureEnds)
-        {
-            StopCapture();
-        }
-    }
-
-    private void StopCapture()
-    {
-        _capture.Stop();
-        _captureArmed = false;
-        ApplyVoiceMode();
-    }
-
-    private void LoadDevices()
-    {
-        try
-        {
-            _mics = AudioEngine.Devices(input: true).ToList();
-            _speakers = AudioEngine.Devices(input: false).ToList();
-            Fill(MicBox, _mics, _settings.Mic, AudioEngine.DefaultDevice(true));
-            Fill(SpeakerBox, _speakers, _settings.Speaker, AudioEngine.DefaultDevice(false));
-        }
-        catch (Exception ex) when (ex is DllNotFoundException or PortAudioException or TypeInitializationException)
-        {
-            StatusText.Text = "Couldn't open the sound system: " + ex.Message;
-        }
-    }
-
-    private static void Fill(ComboBox box, List<(int Index, string Name)> devices, string? saved, int fallback)
-    {
-        box.ItemsSource = devices.Select(d => d.Name).ToList();
-        int i = devices.FindIndex(d => d.Name == saved);
-        if (i < 0)
-        {
-            i = devices.FindIndex(d => d.Index == fallback);
-        }
-        box.SelectedIndex = Math.Max(0, i);
-    }
-
     private async void OnJoin(object? sender, RoutedEventArgs e)
     {
         JoinButton.IsEnabled = false;
         StatusText.Text = "Connecting...";
-        var client = new VoiceClient();
-        client.Activity.Threshold = SensitivitySlider.Value;
-        client.PushToTalk = _settings.PushToTalk;
+        _settingsWindow?.ResetMicTest();
+        var client = new VoiceClient { Mic = _mic };
         client.Disconnected += msg => Dispatcher.UIThread.Post(async () =>
         {
             // Leaving on purpose also closes the connection; only report drops of the live session.
@@ -269,22 +245,9 @@ public partial class MainWindow : Window
         KeyBox.Text = string.Empty; // don't keep the key in the UI
         _settings.Server = ServerBox.Text ?? "commspot.net";
         _settings.Name = NameBox.Text ?? "";
-        _settings.Mic = MicBox.SelectedItem as string;
-        _settings.Speaker = SpeakerBox.SelectedItem as string;
         _settings.Save();
-
-        try
-        {
-            _audio = new AudioEngine(client);
-            _audio.Start(
-                MicBox.SelectedIndex >= 0 && _mics.Count > 0 ? _mics[MicBox.SelectedIndex].Index : PortAudio.NoDevice,
-                SpeakerBox.SelectedIndex >= 0 && _speakers.Count > 0 ? _speakers[SpeakerBox.SelectedIndex].Index : PortAudio.NoDevice);
-            StatusText.Text = string.Empty;
-        }
-        catch (Exception ex) when (ex is PortAudioException or DllNotFoundException)
-        {
-            StatusText.Text = "Joined, but the audio device failed: " + ex.Message;
-        }
+        ApplySettings();
+        StartAudio(client);
 
         JoinPanel.IsVisible = false;
         RoomPanel.IsVisible = true;
@@ -314,6 +277,7 @@ public partial class MainWindow : Window
 
     private async Task LeaveAsync(string? message)
     {
+        _settingsWindow?.ResetMicTest();
         _refresh.Stop();
         _audio?.Dispose();
         _audio = null;
