@@ -27,6 +27,7 @@
     <StackPanel Grid.Row="0" Spacing="2">
       <TextBlock Classes="h1" Text="CommSpot"/>
       <TextBlock Foreground="#8C7F73" Text="Pull up a stool."/>
+      <Button x:Name="UpdateButton" Classes="primary" IsVisible="False" Margin="0,10,0,0"/>
     </StackPanel>
 
     <!-- Sign-in -->

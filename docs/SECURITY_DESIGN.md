@@ -102,6 +102,16 @@ On the current shared VPS, the baseline below was already applied by Metal Coven
 
 ## 9. Distribution and updates
 
+**Now (v0.2+): the app updates itself.** On start and every 6 hours it fetches
+`manifest.json` and `manifest.json.sig` from the latest GitHub release.
+- The manifest lists version, download URL, SHA-256 and size per platform, and is signed with **Ed25519** by the release workflow.
+- The app pins two public keys (current and next, in `UpdateKeys.cs`). An unsigned or wrongly signed manifest is rejected, and so is any version that isn't newer (no downgrades).
+- Every redirect hop must be HTTPS on github.com or its download CDN. The download must match the signed size and SHA-256, and the archive may contain only the app executable.
+- The update is swapped in by renaming the running exe to `.old`. If the swap fails, the old exe is put back. Nothing is installed until all checks pass.
+- **Keys:** the current private key lives only in the GitHub secret `UPDATE_SIGNING_KEY`. The next key is kept offline on the owner's PC and is used only to rotate. The VPS never holds a signing key.
+
+The original plan below (separate launcher, files served from commspot.net) is for Step 4.
+
 Modeled on how Discord ships: a small launcher, then the app downloads itself.
 
 - `https://commspot.net/` serves a static download page with the **launcher** (a few MB) and its SHA-256.

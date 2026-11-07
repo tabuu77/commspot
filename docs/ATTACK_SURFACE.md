@@ -50,7 +50,8 @@ UDP: 7777,7778,50000
 
 | Input | Validation | Added in |
 |---|---|---|
-| `manifest.json` + `.sig` | Ed25519 verify, no downgrade, path allowlist | Step 0 (design) |
+| `manifest.json` + `.sig` (GitHub latest release) | Ed25519 verify against 2 pinned keys, no downgrade, HTTPS + host allowlist on every redirect, 64 KB cap | v0.2 |
+| Update archive | Signed size + SHA-256, only the app exe allowed inside, 300 MB cap | v0.2 |
 | Downloaded app files | SHA-256 must match signed manifest | Step 0 (design) |
 | Hub events (`MemberJoined/Left/Muted`) | Typed records; names shown as plain text | Step 1 |
 | Voice packets from server | AES-GCM auth (server direction), replay window, size limit, then Opus decode | Step 1 |
@@ -65,4 +66,5 @@ UDP: 7777,7778,50000
 | Avalonia (+ Themes.Fluent) | Desktop UI | MIT |
 | PortAudioSharp2 | Mic and speaker I/O (bundles PortAudio) | Apache-2.0 / MIT |
 | Concentus | Opus codec (managed) | BSD-3-Clause |
+| BouncyCastle.Cryptography | Ed25519 update signatures | MIT |
 | xunit (tests only) | Tests | Apache-2.0 |
