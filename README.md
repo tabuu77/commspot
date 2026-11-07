@@ -2,7 +2,7 @@
 
 A self-hosted voice and text chat app for hanging out with friends.
 
-- **Client:** desktop app for Windows and Linux (C#, .NET 8, Avalonia)
+- **Client:** desktop app for Windows and Linux (C#, .NET 10, Avalonia)
 - **Server:** ASP.NET Core on Linux or Windows, behind the shared nginx + Cloudflare (HTTPS)
 - **Voice:** Opus audio over encrypted UDP (AES-256-GCM)
 

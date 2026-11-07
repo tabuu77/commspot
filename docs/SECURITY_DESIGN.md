@@ -53,6 +53,13 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
 
 ## 5. Accounts and sessions
 
+**Step 1 (voice MVP, now):** there are no accounts yet. One shared access key
+(`COMMSPOT_AccessKey`, 32 random characters in `/etc/commspot/secrets.env`) lets
+a client join the single voice room. It is compared in constant time, failed joins
+are limited to 5 per IP per 15 minutes, display names are validated, and the room
+holds at most 10 people. The client never saves the key to disk. Everything below
+replaces this in Step 2.
+
 - Passwords are hashed with **Argon2id** (memory ≥ 64 MB, iterations ≥ 3) and a unique salt. Plaintext is never logged.
 - Passwords must be at least 12 characters and are checked against a common-password list.
 - Login limits: 5 attempts per account per 15 minutes, plus a per-IP limit. Locked-out and wrong-password responses look identical.
@@ -62,8 +69,9 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
 
 ## 6. Application hardening
 
+- Runtime: .NET 10 (LTS, supported to Nov 2028). .NET 8 support ends 2026-11-10.
 - Strict size limits: SignalR messages ≤ 32 KB, voice packets ≤ 1400 bytes, chat messages ≤ 4000 characters.
-- Per-user and per-IP rate limits on every endpoint and on voice packets (about 50 packets/s per sender).
+- Per-user and per-IP rate limits on every endpoint and on voice packets (60 packets/s per voice session, token bucket).
 - All input is validated server-side. Queries are parameterized (EF Core). There's no dynamic SQL.
 - Errors are generic. There are no stack traces in responses.
 - Security events (logins, lockouts, invite use, auth failures) are logged without secrets.

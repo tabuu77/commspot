@@ -14,6 +14,8 @@ ExecStart=/opt/commspot/CommSpot.Server
 EnvironmentFile=/etc/commspot/secrets.env
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5100
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/commspot/.bundle
+Environment=ASPNETCORE_ENVIRONMENT=Production
 Restart=on-failure
 RestartSec=3
 
@@ -45,7 +47,7 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
+SystemCallFilter=~@privileged
 ReadWritePaths=/var/lib/commspot
 UMask=0077
 

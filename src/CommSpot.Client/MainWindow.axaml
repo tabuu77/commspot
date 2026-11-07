@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CommSpot.Client.MainWindow"
+        Title="CommSpot" Width="460" Height="640" MinWidth="380" MinHeight="520"
+        Background="#1B1714">
+  <Window.Styles>
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="26"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="#F2B544"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="#B8A99A"/>
+      <Setter Property="Margin" Value="0,10,0,4"/>
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#F2B544"/>
+      <Setter Property="Foreground" Value="#1B1714"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="0,10"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="20" RowDefinitions="Auto,*,Auto">
+    <StackPanel Grid.Row="0" Spacing="2">
+      <TextBlock Classes="h1" Text="CommSpot"/>
+      <TextBlock Foreground="#8C7F73" Text="Pull up a stool."/>
+    </StackPanel>
+
+    <!-- Sign-in -->
+    <ScrollViewer Grid.Row="1" x:Name="JoinPanel" Margin="0,16,0,0">
+      <StackPanel>
+        <TextBlock Classes="label" Text="Server"/>
+        <TextBox x:Name="ServerBox" Text="commspot.net"/>
+        <TextBlock Classes="label" Text="Your name"/>
+        <TextBox x:Name="NameBox" MaxLength="32" PlaceholderText="1-32 letters or numbers"/>
+        <TextBlock Classes="label" Text="Access key"/>
+        <TextBox x:Name="KeyBox" PasswordChar="●" RevealPassword="False"/>
+        <TextBlock Classes="label" Text="Microphone"/>
+        <ComboBox x:Name="MicBox" HorizontalAlignment="Stretch"/>
+        <TextBlock Classes="label" Text="Speakers"/>
+        <ComboBox x:Name="SpeakerBox" HorizontalAlignment="Stretch"/>
+        <Button x:Name="JoinButton" Classes="primary" Margin="0,20,0,0" Content="Join"/>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- In the room -->
+    <Grid Grid.Row="1" x:Name="RoomPanel" IsVisible="False" Margin="0,16,0,0" RowDefinitions="Auto,*,Auto,Auto">
+      <TextBlock Grid.Row="0" Classes="label" Margin="0,0,0,8" Text="At the bar"/>
+      <Border Grid.Row="1" Background="#26201B" CornerRadius="8" Padding="12">
+        <ScrollViewer>
+          <StackPanel x:Name="MemberList" Spacing="8"/>
+        </ScrollViewer>
+      </Border>
+      <StackPanel Grid.Row="2" Margin="0,12,0,0">
+        <TextBlock Classes="label" Text="Mic sensitivity (move left if you get cut off)"/>
+        <Slider x:Name="SensitivitySlider" Minimum="40" Maximum="1200" Value="180"/>
+      </StackPanel>
+      <Grid Grid.Row="3" ColumnDefinitions="*,8,*,8,*" Margin="0,12,0,0">
+        <Button Grid.Column="0" x:Name="MuteButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Mute"/>
+        <Button Grid.Column="2" x:Name="DeafenButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Deafen"/>
+        <Button Grid.Column="4" x:Name="LeaveButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Leave"/>
+      </Grid>
+    </Grid>
+
+    <TextBlock Grid.Row="2" x:Name="StatusText" Margin="0,12,0,0" Foreground="#E07A5F" TextWrapping="Wrap"/>
+  </Grid>
+</Window>
