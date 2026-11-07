@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CommSpot.Client.SettingsWindow"
+        Title="CommSpot Settings" Width="640" Height="560" MinWidth="520" MinHeight="460"
+        Background="#1B1714" WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="MinHeight" Value="40"/>
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="#F2B544"/>
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="#B8A99A"/>
+      <Setter Property="Margin" Value="0,12,0,4"/>
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#8C7F73"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+  </Window.Styles>
+
+  <TabControl TabStripPlacement="Left" Margin="8">
+    <TabItem Header="Voice">
+      <ScrollViewer Padding="16,0">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="Voice"/>
+          <Grid ColumnDefinitions="*,16,*">
+            <StackPanel Grid.Column="0">
+              <TextBlock Classes="label" Text="Microphone"/>
+              <ComboBox x:Name="MicBox" HorizontalAlignment="Stretch"/>
+              <TextBlock Classes="label" x:Name="MicVolumeLabel" Text="Microphone volume"/>
+              <Slider x:Name="MicVolumeSlider" Minimum="0" Maximum="200" Value="100"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+              <TextBlock Classes="label" Text="Speakers"/>
+              <ComboBox x:Name="SpeakerBox" HorizontalAlignment="Stretch"/>
+              <TextBlock Classes="label" x:Name="SpeakerVolumeLabel" Text="Speaker volume"/>
+              <Slider x:Name="SpeakerVolumeSlider" Minimum="0" Maximum="200" Value="100"/>
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Classes="label" Text="Mic test"/>
+          <Grid ColumnDefinitions="Auto,12,*">
+            <Button Grid.Column="0" x:Name="MicTestButton" Content="Mic Test" MinWidth="110" HorizontalContentAlignment="Center"/>
+            <ProgressBar Grid.Column="2" x:Name="MicMeter" Minimum="0" Maximum="1" Height="12" VerticalAlignment="Center" Foreground="#7BD389"/>
+          </Grid>
+          <TextBlock Classes="hint" Margin="0,6,0,0" Text="Mic Test plays your voice back to you so you can hear how you sound."/>
+
+          <TextBlock Classes="label" Text="Input sensitivity"/>
+          <CheckBox x:Name="AutoSensitivityBox" Content="Automatically adjust input sensitivity"/>
+          <Slider x:Name="SensitivitySlider" Minimum="40" Maximum="1200" Value="180"/>
+          <TextBlock Classes="hint" Text="Voice activity mode only. Move left if your words get cut off, right if background noise gets through."/>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <TabItem Header="Push to Talk">
+      <ScrollViewer Padding="16,0">
+        <StackPanel>
+          <TextBlock Classes="h2" Text="Push to Talk"/>
+          <TextBlock Classes="label" Text="Input mode"/>
+          <RadioButton x:Name="VadRadio" GroupName="mode" Content="Voice activity"/>
+          <RadioButton x:Name="PttRadio" GroupName="mode" Content="Push to talk"/>
+          <TextBlock Classes="label" Text="Push to talk keybind"/>
+          <Button x:Name="PttKeyButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Set key"/>
+          <TextBlock Classes="hint" Margin="0,6,0,0" Text="Any keyboard key or mouse button, including side buttons. Works while a game has focus."/>
+          <TextBlock Classes="label" x:Name="ReleaseLabel" Text="Push to talk release delay"/>
+          <Slider x:Name="ReleaseSlider" Minimum="0" Maximum="1000" Value="200"/>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <TabItem Header="Updates">
+      <StackPanel Margin="16,0">
+        <TextBlock Classes="h2" Text="Updates"/>
+        <TextBlock x:Name="VersionText" Foreground="#EDE3D9"/>
+        <Button x:Name="CheckUpdatesButton" Margin="0,12,0,0" Content="Check for updates"/>
+        <TextBlock x:Name="UpdateStatus" Classes="hint" Margin="0,8,0,0"/>
+        <TextBlock Classes="hint" Margin="0,12,0,0" Text="CommSpot checks automatically when it starts and every 6 hours. Updates are signed and verified before they install."/>
+      </StackPanel>
+    </TabItem>
+  </TabControl>
+</Window>

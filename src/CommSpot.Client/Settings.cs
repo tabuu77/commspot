@@ -12,6 +12,10 @@ internal sealed class Settings
     public bool PushToTalk { get; set; }
     public string? PushToTalkKey { get; set; }
     public double Sensitivity { get; set; } = 180;
+    public bool AutoSensitivity { get; set; }
+    public double MicVolume { get; set; } = 1;
+    public double SpeakerVolume { get; set; } = 1;
+    public int PushToTalkReleaseMs { get; set; } = 200;
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CommSpot", "settings.json");
