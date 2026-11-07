@@ -12,10 +12,15 @@ Group=commspot
 WorkingDirectory=/opt/commspot
 ExecStart=/opt/commspot/CommSpot.Server
 EnvironmentFile=/etc/commspot/secrets.env
-Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5100
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 Restart=on-failure
 RestartSec=3
+
+# Shared VPS: the Metal Covenant game servers come first.
+MemoryMax=1G
+CPUQuota=50%
+TasksMax=256
 
 NoNewPrivileges=true
 ProtectSystem=strict

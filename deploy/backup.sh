@@ -15,7 +15,7 @@ set -a
 . "$ENV_FILE"
 set +a
 
-PATHS=(/var/lib/commspot /etc/commspot /etc/caddy /srv/commspot/www /etc/systemd/system)
+PATHS=(/var/lib/commspot /etc/commspot /etc/nginx/sites-available/commspot /srv/commspot/www /etc/systemd/system/commspot.service)
 
 restic snapshots >/dev/null 2>&1 || restic init
 

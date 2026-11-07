@@ -16,6 +16,10 @@ die()  { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ "$ADMIN_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "Invalid username."
 . /etc/os-release
 [[ "$ID" == "ubuntu" && "$VERSION_ID" == "24.04" ]] || die "This script targets Ubuntu 24.04 (found $PRETTY_NAME)."
+# Fresh dedicated servers only: it resets ufw and installs Caddy.
+if [[ -d /opt/mc2684 || -f /etc/nginx/sites-enabled/mc2684 ]]; then
+  die "Shared VPS detected (Metal Covenant). Use deploy/setup-shared-vps.sh instead."
+fi
 
 # ---------------------------------------------------------------- 1. admin user
 say "1/9 Admin user '$ADMIN_USER' with sudo and SSH key"
