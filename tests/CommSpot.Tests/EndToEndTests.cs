@@ -15,7 +15,7 @@ namespace CommSpot.Tests;
 /// <summary>Real server on loopback, two real clients, synthetic audio: proves voice goes A -> server -> B.</summary>
 public sealed class EndToEndTests : IAsyncLifetime
 {
-    private const string Key = "end-to-end-test-access-key-123";
+    private const string Key = "end-to-end-test-access-key-123"; // gitleaks:allow (test-only value)
     private WebApplication _app = null!;
     private string _url = null!;
 

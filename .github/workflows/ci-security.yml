@@ -19,7 +19,7 @@ jobs:
       - name: Gitleaks (secret scan of full history)
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
-            git /repo --redact --no-banner --exit-code 1
+            git /repo --redact --no-banner --verbose --exit-code 1
 
   dependencies:
     runs-on: ubuntu-latest

@@ -5,7 +5,7 @@ namespace CommSpot.Tests;
 
 public class ServerUnitTests
 {
-    private const string Key = "correct-horse-battery-staple-42";
+    private const string Key = "correct-horse-battery-staple-42"; // gitleaks:allow (test-only value)
 
     [Fact]
     public void KeyMatches_OnlyExactKey()
