@@ -1,0 +1,91 @@
+# Weekly external attack-surface check of the live VPS.
+# Fails (and GitHub emails you) if anything is exposed that ATTACK_SURFACE.md doesn't list.
+name: security-scan
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Override in repo Settings > Secrets and variables > Actions > Variables.
+  SCAN_HOSTS: ${{ vars.SCAN_HOSTS || 'voice.commspot.net commspot.net' }}
+
+jobs:
+  ports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install nmap
+        run: sudo apt-get update -q && sudo apt-get install -y -q nmap
+      - name: Scan and compare against ATTACK_SURFACE.md allowlist
+        run: |
+          set -euo pipefail
+          allow_tcp=$(grep -E '^TCP:' docs/ATTACK_SURFACE.md | head -1 | sed 's/TCP:\s*//; s/\s//g')
+          allow_udp=$(grep -E '^UDP:' docs/ATTACK_SURFACE.md | head -1 | sed 's/UDP:\s*//; s/\s//g')
+          echo "Allowed TCP: $allow_tcp  UDP: $allow_udp"
+          fail=0
+          for h in $SCAN_HOSTS; do
+            if ! getent hosts "$h" >/dev/null; then
+              echo "::warning::$h does not resolve yet, skipping"; continue
+            fi
+            echo "== $h: full TCP scan"
+            sudo nmap -Pn -sS -p- -T4 --open -oG tcp.txt "$h" >/dev/null
+            open_tcp=$(grep -oE '[0-9]+/open/tcp' tcp.txt | cut -d/ -f1 | sort -n | paste -sd, - || true)
+            echo "Open TCP: ${open_tcp:-none}"
+            echo "== $h: UDP scan (top 200 + allowlist)"
+            sudo nmap -Pn -sU --top-ports 200 -p "U:${allow_udp}" -T4 --open -oG udp.txt "$h" >/dev/null || true
+            open_udp=$(grep -oE '[0-9]+/open/udp' udp.txt | cut -d/ -f1 | sort -n | paste -sd, - || true)
+            echo "Open UDP (confirmed open only): ${open_udp:-none}"
+            for p in ${open_tcp//,/ }; do
+              [[ ",$allow_tcp," == *",$p,"* ]] || { echo "::error::$h unexpected open TCP port $p"; fail=1; }
+            done
+            for p in ${open_udp//,/ }; do
+              [[ ",$allow_udp," == *",$p,"* ]] || { echo "::error::$h unexpected open UDP port $p"; fail=1; }
+            done
+          done
+          exit $fail
+
+  tls:
+    runs-on: ubuntu-latest
+    steps:
+      - name: testssl.sh (fail on HIGH or CRITICAL findings)
+        run: |
+          set -uo pipefail
+          fail=0
+          for h in $SCAN_HOSTS; do
+            if ! getent hosts "$h" >/dev/null; then
+              echo "::warning::$h does not resolve yet, skipping"; continue
+            fi
+            docker run --rm -v "$PWD:/out" drwetter/testssl.sh:3.2 \
+              --quiet --color 0 --severity HIGH --jsonfile "/out/$h.json" "https://$h" || true
+            bad=$(jq -r '.[] | select(.severity=="HIGH" or .severity=="CRITICAL") | "\(.id): \(.finding)"' "$h.json" 2>/dev/null || true)
+            if [ -n "$bad" ]; then echo "::error::$h TLS issues:"; echo "$bad"; fail=1; else echo "$h TLS OK"; fi
+          done
+          exit $fail
+
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "8.0.x"
+      - name: Weekly re-check for newly disclosed vulnerabilities
+        run: |
+          shopt -s globstar nullglob
+          projects=(**/*.sln)
+          if [ ${#projects[@]} -eq 0 ]; then echo "No .NET solution yet, skipping."; exit 0; fi
+          for p in "${projects[@]}"; do
+            dotnet restore "$p"
+            if dotnet list "$p" package --vulnerable --include-transitive | tee /dev/stderr | grep -q 'has the following vulnerable packages'; then
+              echo "::error::Vulnerable packages in $p"; exit 1
+            fi
+          done
