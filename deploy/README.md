@@ -28,7 +28,9 @@ What it does (all additive, safe to re-run):
 | A | `www` | VPS IP | **Proxied (orange)** |
 | A | `voice` | VPS IP | **DNS only (grey)**, needed for UDP voice |
 
-Then in SSL/TLS → Overview, set the mode to **Full (strict)**. Re-run the setup script so certbot can issue the cert.
+Then in SSL/TLS → Overview, set the mode to **Full (strict)**.
+
+Certificates use **DNS-01** (ufw blocks Let's Encrypt from reaching port 80). Save a Cloudflare API token (template "Edit zone DNS", zone commspot.net) as `dns_cloudflare_api_token=...` in `/etc/letsencrypt/commspot-cloudflare.ini` (mode 600), then re-run the setup script.
 
 ### Backups
 
