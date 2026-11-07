@@ -76,6 +76,7 @@ replaces this in Step 2.
 - Errors are generic. There are no stack traces in responses.
 - Security events (logins, lockouts, invite use, auth failures) are logged without secrets.
 - Runs as the `commspot` system user with systemd sandboxing and resource caps (see `deploy/commspot.service`).
+- Client push-to-talk polls the state of the **one bound key** (GetAsyncKeyState on Windows, XQueryKeymap on X11). No keyboard hooks, nothing is recorded; all keys are scanned only while the user is picking a key.
 - Secrets live in `/etc/commspot/secrets.env` (mode 600) and never in git.
 
 ## 7. VPS hardening

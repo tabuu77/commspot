@@ -99,6 +99,30 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PushToTalk_SendsOnlyWhileHeld()
+    {
+        await using var a = new VoiceClient { PushToTalk = true };
+        await using var b = new VoiceClient();
+        Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+        Assert.Null(await b.ConnectAsync(_url, Key, "Bob"));
+        await Task.Delay(300);
+
+        Assert.Equal(0, await TalkAndListen(a, b)); // key not held: loud tone must not go out
+
+        a.PushToTalkHeld = true;
+        Assert.True(await TalkAndListen(a, b) > 2000, "Bob should hear Alice while the key is held.");
+
+        a.PushToTalkHeld = false;
+        await Task.Delay(VoiceClient.PushToTalkReleaseMs + 300);
+        var drain = new short[VoiceConstants.FrameSamples];
+        for (int i = 0; i < 20; i++)
+        {
+            b.ReadSpeakerFrame(drain);
+        }
+        Assert.Equal(0, await TalkAndListen(a, b));
+    }
+
+    [Fact]
     public async Task WrongAccessKey_IsRejected()
     {
         await using var c = new VoiceClient();

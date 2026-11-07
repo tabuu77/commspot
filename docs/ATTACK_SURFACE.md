@@ -54,6 +54,7 @@ UDP: 7777,7778,50000
 | Downloaded app files | SHA-256 must match signed manifest | Step 0 (design) |
 | Hub events (`MemberJoined/Left/Muted`) | Typed records; names shown as plain text | Step 1 |
 | Voice packets from server | AES-GCM auth (server direction), replay window, size limit, then Opus decode | Step 1 |
+| Global key state (push-to-talk) | Only the bound key is read; local only, never sent | Step 3 (early) |
 | Server address typed by user | `https://` only; plain `http://` allowed for loopback only | Step 1 |
 
 ## Third-party dependencies

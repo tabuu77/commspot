@@ -55,8 +55,19 @@
         </ScrollViewer>
       </Border>
       <StackPanel Grid.Row="2" Margin="0,12,0,0">
-        <TextBlock Classes="label" Text="Mic sensitivity (move left if you get cut off)"/>
-        <Slider x:Name="SensitivitySlider" Minimum="40" Maximum="1200" Value="180"/>
+        <TextBlock Classes="label" Text="Voice mode"/>
+        <ComboBox x:Name="VoiceModeBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+          <ComboBoxItem Content="Voice activity"/>
+          <ComboBoxItem Content="Push-to-talk"/>
+        </ComboBox>
+        <StackPanel x:Name="VadPanel">
+          <TextBlock Classes="label" Text="Mic sensitivity (move left if you get cut off)"/>
+          <Slider x:Name="SensitivitySlider" Minimum="40" Maximum="1200" Value="180"/>
+        </StackPanel>
+        <StackPanel x:Name="PttPanel" IsVisible="False">
+          <TextBlock Classes="label" Text="Push-to-talk key (works while other apps have focus)"/>
+          <Button x:Name="PttKeyButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Set key"/>
+        </StackPanel>
       </StackPanel>
       <Grid Grid.Row="3" ColumnDefinitions="*,8,*,8,*" Margin="0,12,0,0">
         <Button Grid.Column="0" x:Name="MuteButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Mute"/>
