@@ -1,0 +1,2 @@
+# Test-only key in a unit test (not a real secret); later commits mark it with gitleaks:allow.
+240e7f15f0913b2ce90ea1d5d80d73a2e4612c25:tests/CommSpot.Tests/ServerUnitTests.cs:generic-api-key:8
