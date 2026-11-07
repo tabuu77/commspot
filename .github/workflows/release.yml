@@ -44,6 +44,16 @@ jobs:
           (cd out/win && zip -qr ../../dist/CommSpot-windows-x64.zip .)
           tar -C out/linux -czf dist/CommSpot-linux-x64.tar.gz .
           (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+      - name: Signed update manifest
+        env:
+          COMMSPOT_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$COMMSPOT_SIGNING_KEY" ] || { echo "::error::UPDATE_SIGNING_KEY secret is missing"; exit 1; }
+          tool="dotnet run --project src/CommSpot.ReleaseTool -c Release --"
+          $tool manifest "$TAG" dist "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          $tool sign dist/manifest.json
+          cat dist/manifest.json
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

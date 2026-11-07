@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _capture = new() { Interval = TimeSpan.FromMilliseconds(15) };
     private bool _captureArmed;
     private long _captureEnds;
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
+    private UpdateOffer? _offer;
 
     public MainWindow()
     {
@@ -51,6 +53,16 @@ public partial class MainWindow : Window
         PttKeyButton.Click += (_, _) => StartCapture();
         _capture.Tick += (_, _) => CaptureTick();
 
+        Title = $"CommSpot {SelfUpdate.Current.ToString(3)}";
+        SelfUpdate.CleanupOld();
+        UpdateButton.Click += OnUpdate;
+        _updateTimer.Tick += async (_, _) => await CheckForUpdateAsync();
+        Opened += async (_, _) =>
+        {
+            _updateTimer.Start();
+            await CheckForUpdateAsync();
+        };
+
         JoinButton.Click += OnJoin;
         MuteButton.Click += OnMute;
         DeafenButton.Click += OnDeafen;
@@ -77,6 +89,49 @@ public partial class MainWindow : Window
             _ptt?.Dispose();
             _input?.Dispose();
         };
+    }
+
+    private async Task CheckForUpdateAsync()
+    {
+        try
+        {
+            _offer = await SelfUpdate.CheckAsync();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or IOException
+                                       or TaskCanceledException or System.Text.Json.JsonException or FormatException)
+        {
+            return; // offline or bad manifest: keep the current version, try again later
+        }
+        if (_offer is not null)
+        {
+            UpdateButton.Content = $"Update to {_offer.Version.ToString(3)} available. Click to update and restart";
+            UpdateButton.IsVisible = true;
+        }
+    }
+
+    private async void OnUpdate(object? sender, RoutedEventArgs e)
+    {
+        if (_offer is null)
+        {
+            return;
+        }
+        UpdateButton.IsEnabled = false;
+        var progress = new Progress<double>(p => UpdateButton.Content = $"Downloading update... {p:P0}");
+        try
+        {
+            await LeaveAsync(null);
+            await SelfUpdate.ApplyAsync(_offer, progress);
+            _settings.Save();
+            Close();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or IOException
+                                       or UnauthorizedAccessException or TaskCanceledException or InvalidOperationException
+                                       or System.ComponentModel.Win32Exception)
+        {
+            UpdateButton.Content = "Update failed, kept this version. Click to retry";
+            StatusText.Text = ex.Message;
+            UpdateButton.IsEnabled = true;
+        }
     }
 
     private void ApplyVoiceMode()
