@@ -1,59 +1,41 @@
-# Setting up the CommSpot VPS (Ubuntu 24.04)
+# Deploying CommSpot
 
-Takes about 15 minutes. Keep your current SSH session open the whole time.
+## Current server: shared with Metal Covenant
 
-## 1. Put your SSH key on the VPS (from your PC)
-
-```bash
-# Skip the first line if you already have ~/.ssh/id_ed25519
-ssh-keygen -t ed25519
-ssh-copy-id root@<VPS-IP>
-```
-
-## 2. Run the hardening script (on the VPS, as root)
+The VPS (`srv2129622`, ssh alias `mc2684`, user `crow`) already has Metal Covenant's
+hardening: key-only SSH, ufw, fail2ban, and auto updates. CommSpot only **adds** its pieces.
+Read [docs/SHARED_VPS.md](../docs/SHARED_VPS.md) first.
 
 ```bash
-ssh root@<VPS-IP>
-apt-get update && apt-get install -y git
-git clone https://github.com/tabuu77/commspot.git /root/commspot
-bash /root/commspot/deploy/harden-vps.sh <your-admin-name>
+ssh mc2684
+git clone https://github.com/tabuu77/commspot.git ~/commspot   # or: git -C ~/commspot pull
+sudo bash ~/commspot/deploy/setup-shared-vps.sh
 ```
 
-The script stops halfway and asks you to test logging in as your new admin user in a
-**second terminal**. Only type `yes` once that works. After this, root login and
-passwords are disabled, and you log in with `ssh <your-admin-name>@<VPS-IP>`.
+What it does (all additive, safe to re-run):
+- Creates the `commspot` user and its folders.
+- Adds one firewall rule, `50000/udp` (voice).
+- Adds a 2 GB swapfile if the box has none.
+- Adds the nginx site `commspot`. It backs up the config, runs `nginx -t`, then reloads. Metal Covenant's sites are never touched.
+- Gets the certificate through certbot once DNS resolves.
+- Sets up backup tooling and copies the shared registry to `/home/crow/SHARED-VPS.md`.
 
-> Private repo? Use a GitHub deploy key or copy the `deploy/` folder over with `scp -r`.
+### DNS in Cloudflare (commspot.net zone)
 
-## 3. DNS in Cloudflare
+| Type | Name | Content | Proxy |
+|---|---|---|---|
+| A | `@` | VPS IP | **Proxied (orange)** |
+| A | `www` | VPS IP | **Proxied (orange)** |
+| A | `voice` | VPS IP | **DNS only (grey)**, needed for UDP voice |
 
-Add two **A records** pointing at the VPS IP, both **DNS only (grey cloud)**:
+Then in SSL/TLS → Overview, set the mode to **Full (strict)**. Re-run the setup script so certbot can issue the cert.
 
-| Name | Purpose |
-|---|---|
-| `commspot.net` (`@`) | Download page and updates |
-| `voice` | App API and voice |
+### Backups
 
-Caddy gets HTTPS certificates automatically once DNS resolves.
+Create `/etc/commspot/backup.env` (format at the top of `backup.sh`), `chmod 600` it,
+then run `sudo systemctl enable --now commspot-backup.timer`.
 
-## 4. Hostinger panel (optional extra layer)
+## Fresh dedicated server (disaster recovery only)
 
-In hPanel → VPS → **Firewall**, allow only 22/tcp, 443/tcp, and 50000/udp. That way
-traffic is filtered before it even reaches the server.
-
-## 5. Backups
-
-Create `/etc/commspot/backup.env` (see the top of `backup.sh` for the format), then:
-
-```bash
-sudo chmod 600 /etc/commspot/backup.env
-sudo systemctl enable --now commspot-backup.timer
-sudo /opt/commspot-deploy/backup.sh   # first run, to confirm it works
-```
-
-Store the `RESTIC_PASSWORD` in your password manager. Without it, backups can't be restored.
-
-## 6. Check it from the outside
-
-On GitHub: **Actions → security-scan → Run workflow**. It should pass with
-only the ports listed in `docs/ATTACK_SURFACE.md` open.
+`deploy/harden-vps.sh` does full hardening of a brand-new Ubuntu 24.04 box (it resets ufw).
+It refuses to run on the shared server. See [docs/DISASTER_RECOVERY.md](../docs/DISASTER_RECOVERY.md).

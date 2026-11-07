@@ -29,20 +29,19 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
 ## 3. Network layout
 
 ```
- Client ──TLS 1.3 (443/tcp)──▶ Caddy ──▶ 127.0.0.1:5000 CommSpot server (API + SignalR)
- Client ──AES-GCM UDP (50000/udp)──────▶ CommSpot voice relay
- Admin  ──SSH key only (22/tcp)────────▶ VPS
+ Client ──TLS──▶ Cloudflare (orange) ──TLS──▶ nginx (443, Cloudflare IPs only) ──▶ 127.0.0.1:5100 CommSpot server
+ Client ──AES-GCM UDP (50000/udp) via voice.commspot.net (grey cloud)──▶ CommSpot voice relay
+ Admin  ──SSH key only (22/tcp)──▶ VPS
 ```
 
-- The app's HTTP port binds to **localhost only**. Only Caddy faces the internet.
-- Port 80 stays **closed**. Caddy gets its certificate with TLS-ALPN on 443.
-- `voice.commspot.net` is a **DNS-only (grey cloud)** Cloudflare record, because
-  Cloudflare's free proxy can't carry UDP voice. Accept that the VPS IP is public
-  and harden it accordingly.
+- The VPS is **shared with Metal Covenant** (see [SHARED_VPS.md](SHARED_VPS.md)). CommSpot only adds rules and files and never replaces shared config.
+- The app's HTTP port binds to **localhost only**. The shared nginx is the only web entry point, and ufw lets only Cloudflare IPs reach 80/443.
+- `commspot.net` is **proxied (orange cloud)**. Cloudflare SSL mode must be **Full (strict)**. nginx gets a Let's Encrypt cert through certbot.
+- `voice.commspot.net` is **DNS-only (grey cloud)**, because Cloudflare's free proxy can't carry UDP. The VPS IP is already public through the game server, so the box is hardened accordingly.
 
 ## 4. Transport security
 
-- **Control channel** (login, chat, presence): HTTPS and WSS through Caddy. TLS 1.2 is the minimum and TLS 1.3 is preferred. HSTS is on.
+- **Control channel** (login, chat, presence): HTTPS and WSS through Cloudflare and nginx. TLS 1.2 is the minimum and TLS 1.3 is preferred. HSTS is on.
 - **Voice (UDP):**
   - The server gives each client a fresh random 256-bit key and a session ID when it joins a voice channel. The key travels only over the TLS channel.
   - Packet: `[version 1B][sessionId 4B][counter 8B][AES-256-GCM ciphertext + 16B tag]`. The header is authenticated data.
@@ -68,13 +67,15 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
 - All input is validated server-side. Queries are parameterized (EF Core). There's no dynamic SQL.
 - Errors are generic. There are no stack traces in responses.
 - Security events (logins, lockouts, invite use, auth failures) are logged without secrets.
-- Runs as the `commspot` system user with systemd sandboxing (see `deploy/commspot.service`).
+- Runs as the `commspot` system user with systemd sandboxing and resource caps (see `deploy/commspot.service`).
 - Secrets live in `/etc/commspot/secrets.env` (mode 600) and never in git.
 
-## 7. VPS hardening (`deploy/harden-vps.sh`)
+## 7. VPS hardening
+
+On the current shared VPS, the baseline below was already applied by Metal Covenant's hardening (Nov 5). CommSpot's additions come from `deploy/setup-shared-vps.sh`. `deploy/harden-vps.sh` is only for rebuilding on a **fresh, dedicated** server (DRP), and it refuses to run on the shared box.
 
 - SSH: keys only, no root login, no passwords, MaxAuthTries 3. It refuses to run if no SSH key is installed, so you can't lock yourself out.
-- Firewall (ufw): default deny incoming. Allowed: 22/tcp (rate-limited), 443/tcp, 50000/udp.
+- Firewall (ufw): default deny incoming. 22/tcp, 80+443/tcp from Cloudflare only, and each project's own UDP ports.
 - fail2ban on SSH.
 - Unattended security upgrades with automatic reboot at 04:00 when needed.
 - Kernel network hardening via sysctl (SYN cookies, no redirects, reverse-path filtering).
@@ -86,7 +87,7 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
 - **Gitleaks** secret scanning on every push and PR.
 - **Weekly external scan** (`.github/workflows/security-scan.yml`):
   - Port-scans the VPS from the internet and **fails if any port is open that isn't in ATTACK_SURFACE.md**.
-  - Checks the TLS configuration (testssl.sh).
+  - Checks the TLS configuration (testssl.sh) of the public site.
 - Third-party GitHub Actions are pinned to full commit SHAs.
 - Releases ship through the signed manifest (section 9).
 

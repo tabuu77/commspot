@@ -16,7 +16,7 @@ and **test a full restore every 3 months** (log it at the bottom).
 |---|---|---|---|
 | Database (accounts, servers, chat) | `/var/lib/commspot/` | Nightly encrypted restic, off-site | No, so back it up |
 | Server secrets (JWT key, etc.) | `/etc/commspot/secrets.env` | Nightly restic | Yes, by rotating (forces everyone to log in again) |
-| Caddy config, systemd units | `/etc/caddy/`, `/etc/systemd/system/commspot*` | Git repo + restic | Yes, from git |
+| nginx site, systemd units | `/etc/nginx/sites-available/commspot`, `/etc/systemd/system/commspot*` | Git repo + restic | Yes, from git |
 | Website and update files | `/srv/commspot/www/` | Git releases + restic | Yes, by re-publishing |
 | **Update signing key (Ed25519 private)** | Offline, on the developer's PC | **2 encrypted copies**: USB drive + password manager | **No. Losing it means users must reinstall the launcher** |
 | Restic repo password | Password manager | The password manager's own backups | No |
@@ -36,7 +36,7 @@ and **test a full restore every 3 months** (log it at the bottom).
 ## 4. Scenarios and runbooks
 
 ### A. VPS dead, deleted, or Hostinger outage
-1. Create a new Ubuntu 24.04 VPS (Hostinger or any provider).
+1. Create a new Ubuntu 24.04 VPS (Hostinger or any provider). If Metal Covenant moves too, rebuild it first per its own docs, then use `deploy/setup-shared-vps.sh`; otherwise use `harden-vps.sh`.
 2. `git clone` the repo, then run `deploy/harden-vps.sh <admin>` (see deploy/README.md).
 3. Install restic, recreate `/etc/commspot/backup.env`, then `restic restore latest --target /`.
 4. Install the app (Step 1+ instructions) and run `systemctl enable --now commspot`.

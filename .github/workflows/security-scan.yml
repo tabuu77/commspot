@@ -12,7 +12,9 @@ permissions:
 
 env:
   # Override in repo Settings > Secrets and variables > Actions > Variables.
-  SCAN_HOSTS: ${{ vars.SCAN_HOSTS || 'voice.commspot.net commspot.net' }}
+  # PORT_HOSTS must be grey-cloud (direct to the VPS). TLS_HOSTS can be proxied.
+  PORT_HOSTS: ${{ vars.PORT_HOSTS || 'voice.commspot.net' }}
+  TLS_HOSTS: ${{ vars.TLS_HOSTS || 'commspot.net' }}
 
 jobs:
   ports:
@@ -30,7 +32,7 @@ jobs:
           allow_udp=$(grep -E '^UDP:' docs/ATTACK_SURFACE.md | head -1 | sed 's/UDP:\s*//; s/\s//g')
           echo "Allowed TCP: $allow_tcp  UDP: $allow_udp"
           fail=0
-          for h in $SCAN_HOSTS; do
+          for h in $PORT_HOSTS; do
             if ! getent hosts "$h" >/dev/null; then
               echo "::warning::$h does not resolve yet, skipping"; continue
             fi
@@ -58,7 +60,7 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          for h in $SCAN_HOSTS; do
+          for h in $TLS_HOSTS; do
             if ! getent hosts "$h" >/dev/null; then
               echo "::warning::$h does not resolve yet, skipping"; continue
             fi
