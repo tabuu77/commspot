@@ -1,0 +1,12 @@
+[Unit]
+Description=CommSpot nightly encrypted backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/commspot-deploy/backup.sh
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true

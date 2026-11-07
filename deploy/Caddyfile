@@ -1,0 +1,56 @@
+# CommSpot reverse proxy. Port 80 stays closed: certificates use TLS-ALPN on 443.
+{
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+voice.commspot.net {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	request_body {
+		max_size 1MB
+	}
+
+	# Until the app exists (Step 1), answer with a plain 404.
+	@app path /hub* /api/*
+	handle @app {
+		reverse_proxy 127.0.0.1:5000
+	}
+	handle {
+		respond 404
+	}
+}
+
+# Website: download page, launcher, and signed update files (all static, read-only).
+commspot.net {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Content-Security-Policy "default-src 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	@notGet not method GET HEAD
+	respond @notGet 405
+
+	root * /srv/commspot/www
+	file_server
+}
