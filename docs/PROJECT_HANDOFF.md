@@ -14,7 +14,7 @@ Domain: commspot.net (Cloudflare). VPS: Hostinger KVM 2, Ubuntu 24.04.
 ## Status
 | Step | State |
 |---|---|
-| 0. Security baseline (docs, hardening, scans, DRP) | Written, PR open. Scripts are lint-checked but **not yet run on the VPS** |
+| 0. Security baseline (docs, hardening, scans, DRP) | **Done.** VPS set up 2026-11-07 via setup-shared-vps.sh; commspot.net live on HTTPS (Cloudflare Full strict, DNS-01 cert); external scan green (only 22/tcp open, TLS OK). Backups NOT enabled yet (need off-site storage + backup.env) |
 | 1. Voice MVP (server + Avalonia client) | Not started |
 | 2. Accounts, servers, channels, text chat | Not started |
 | 3. Extras (presence, push-to-talk, screen share) | Not started |
@@ -27,7 +27,11 @@ Domain: commspot.net (Cloudflare). VPS: Hostinger KVM 2, Ubuntu 24.04.
 - `deploy/`: setup-shared-vps.sh (current box), harden-vps.sh (fresh box only), nginx site, systemd units, backup script
 - `.github/workflows/`: `ci-security` (gitleaks + vulnerable deps), `security-scan` (weekly nmap + testssl)
 
+## Access notes
+- VPS: from the owner's Windows PC, `"C:\Program Files\Git\usr\bin\ssh.exe" mc2684` (user crow, passwordless sudo). The PC's Claude permission rules block writes over ssh, so server-changing commands are given to the owner as one PowerShell line.
+- Cloudflare token (DNS Edit, Zone Read, Zone Settings Edit; commspot.net only; IP-locked to the VPS v4+v6) lives at `/etc/letsencrypt/commspot-cloudflare.ini`.
+- DNS: `commspot.net` and `www` are proxied, and `voice` is DNS-only (UDP).
+
 ## Next steps
-1. Owner runs `deploy/README.md` on the VPS and sets the DNS records.
-2. Run the security-scan workflow manually to confirm the baseline.
-3. Start Step 1: voice MVP.
+1. Choose off-site backup storage and enable `commspot-backup.timer`.
+2. Start Step 1: voice MVP (server + Avalonia client; pick a cross-platform audio library).
