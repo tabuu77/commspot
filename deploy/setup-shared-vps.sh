@@ -79,15 +79,21 @@ fi
 systemctl reload nginx
 
 # ----------------------------------------------------------- 5. certificate
-say "5/7 TLS certificate (certbot), only once DNS points here"
+# DNS-01 via Cloudflare: ufw only admits Cloudflare IPs on 80/443, so HTTP-01 can't reach us.
+say "5/7 TLS certificate (certbot DNS-01 via Cloudflare)"
+CF_INI=/etc/letsencrypt/commspot-cloudflare.ini
 if [[ -d /etc/letsencrypt/live/commspot.net ]]; then
   echo "Certificate already exists."
-elif getent hosts commspot.net >/dev/null; then
-  certbot --nginx -d commspot.net -d www.commspot.net --non-interactive --agree-tos \
-    --register-unsafely-without-email --redirect || echo "certbot failed; re-run this script after DNS settles."
+elif [[ -f "$CF_INI" ]]; then
+  chmod 600 "$CF_INI"
+  dpkg -s python3-certbot-dns-cloudflare &>/dev/null || apt-get -y -q install python3-certbot-dns-cloudflare
+  certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$CF_INI" \
+    --dns-cloudflare-propagation-seconds 30 -d commspot.net -d www.commspot.net \
+    --non-interactive --agree-tos --register-unsafely-without-email
+  certbot install --nginx --cert-name commspot.net --redirect --non-interactive
   nginx -t && systemctl reload nginx
 else
-  echo "commspot.net does not resolve yet; re-run this script after adding DNS."
+  echo "No $CF_INI yet (Cloudflare token, Edit zone DNS for commspot.net); skipping certificate."
 fi
 
 # ---------------------------------------------------------------- 6. backups
