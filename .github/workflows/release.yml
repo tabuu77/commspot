@@ -1,0 +1,52 @@
+# Builds the server and desktop apps and publishes them as a GitHub Release with SHA-256 checksums.
+# Trigger: push a tag like v0.1.0 (or run manually with a tag name).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "10.0.x"
+      - name: Test first
+        run: dotnet test CommSpot.sln -c Release
+      - name: Publish
+        run: |
+          set -euo pipefail
+          V="${TAG#v}"
+          common="-c Release --self-contained -p:PublishSingleFile=true -p:DebugType=none -p:Version=$V"
+          dotnet publish src/CommSpot.Server $common -r linux-x64 -o out/server
+          dotnet publish src/CommSpot.Client $common -r win-x64 -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out/win
+          dotnet publish src/CommSpot.Client $common -r linux-x64 -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out/linux
+          find out -name '*.pdb' -delete
+          mkdir dist
+          tar -C out/server -czf dist/commspot-server-linux-x64.tar.gz .
+          (cd out/win && zip -qr ../../dist/CommSpot-windows-x64.zip .)
+          tar -C out/linux -czf dist/CommSpot-linux-x64.tar.gz .
+          (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "CommSpot $TAG" \
+            --notes "Server and desktop builds. Verify downloads against SHA256SUMS."
