@@ -36,6 +36,28 @@ public sealed class VoiceClient : IAsyncDisposable
     public bool Deafened { get; set; }
     public VoiceActivity Activity => _vad;
 
+    /// <summary>Keep sending this long after the push-to-talk key is released, so word endings aren't cut.</summary>
+    public const int PushToTalkReleaseMs = 200;
+    private volatile bool _pttHeld;
+    private long _pttReleasedAt;
+
+    /// <summary>When true the mic only sends while <see cref="PushToTalkHeld"/> (plus a short release tail); otherwise voice activity decides.</summary>
+    public bool PushToTalk { get; set; }
+
+    /// <summary>Set from the push-to-talk key state (any thread).</summary>
+    public bool PushToTalkHeld
+    {
+        get => _pttHeld;
+        set
+        {
+            if (_pttHeld && !value)
+            {
+                Interlocked.Exchange(ref _pttReleasedAt, Environment.TickCount64);
+            }
+            _pttHeld = value;
+        }
+    }
+
     /// <summary>Raised (on a background thread) whenever the member list or a mute flag changes.</summary>
     public event Action? MembersChanged;
 
@@ -147,7 +169,10 @@ public sealed class VoiceClient : IAsyncDisposable
         {
             return;
         }
-        if (!_vad.IsVoice(frame))
+        bool send = PushToTalk
+            ? _pttHeld || Environment.TickCount64 - Interlocked.Read(ref _pttReleasedAt) < PushToTalkReleaseMs
+            : _vad.IsVoice(frame);
+        if (!send)
         {
             return;
         }

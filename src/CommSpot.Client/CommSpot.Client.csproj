@@ -3,6 +3,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>CommSpot</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>

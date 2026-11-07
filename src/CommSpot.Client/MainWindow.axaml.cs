@@ -17,6 +17,11 @@ public partial class MainWindow : Window
     private VoiceClient? _client;
     private AudioEngine? _audio;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(120) };
+    private readonly GlobalInput? _input = GlobalInput.Create();
+    private readonly PushToTalkWatcher? _ptt;
+    private readonly DispatcherTimer _capture = new() { Interval = TimeSpan.FromMilliseconds(15) };
+    private bool _captureArmed;
+    private long _captureEnds;
 
     public MainWindow()
     {
@@ -24,6 +29,27 @@ public partial class MainWindow : Window
         ServerBox.Text = _settings.Server;
         NameBox.Text = _settings.Name;
         LoadDevices();
+        SensitivitySlider.Value = _settings.Sensitivity;
+        VoiceModeBox.SelectedIndex = _settings.PushToTalk ? 1 : 0;
+        if (_input is not null)
+        {
+            _ptt = new PushToTalkWatcher(_input, held =>
+            {
+                if (_client is { } c)
+                {
+                    c.PushToTalkHeld = held;
+                }
+            });
+        }
+        ApplyVoiceMode();
+        VoiceModeBox.SelectionChanged += (_, _) =>
+        {
+            _settings.PushToTalk = VoiceModeBox.SelectedIndex == 1;
+            _settings.Save();
+            ApplyVoiceMode();
+        };
+        PttKeyButton.Click += (_, _) => StartCapture();
+        _capture.Tick += (_, _) => CaptureTick();
 
         JoinButton.Click += OnJoin;
         MuteButton.Click += OnMute;
@@ -35,9 +61,92 @@ public partial class MainWindow : Window
             {
                 _client.Activity.Threshold = SensitivitySlider.Value;
             }
+            if (e.Property == Slider.ValueProperty)
+            {
+                _settings.Sensitivity = SensitivitySlider.Value;
+            }
         };
         _refresh.Tick += (_, _) => RenderMembers();
-        Closing += async (_, _) => await LeaveAsync(null);
+        Closing += async (_, _) =>
+        {
+            _settings.Save();
+            await LeaveAsync(null);
+        };
+        Closed += (_, _) =>
+        {
+            _ptt?.Dispose();
+            _input?.Dispose();
+        };
+    }
+
+    private void ApplyVoiceMode()
+    {
+        bool ptt = _settings.PushToTalk;
+        VadPanel.IsVisible = !ptt;
+        PttPanel.IsVisible = ptt;
+        if (_input is null)
+        {
+            PttKeyButton.IsEnabled = false;
+            PttKeyButton.Content = "Push-to-talk isn't available on this system";
+        }
+        else if (!_captureArmed && _capture.IsEnabled is false)
+        {
+            PttKeyButton.Content = _settings.PushToTalkKey is { } k ? $"{_input.Describe(k)}  (click to change)" : "Set key";
+        }
+        if (_ptt is not null)
+        {
+            _ptt.Binding = ptt ? _settings.PushToTalkKey : null;
+        }
+        if (_client is { } c)
+        {
+            c.PushToTalk = ptt;
+        }
+    }
+
+    private void StartCapture()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        if (_ptt is not null)
+        {
+            _ptt.Binding = null; // don't transmit while picking
+        }
+        _captureArmed = false;
+        _captureEnds = Environment.TickCount64 + 10_000;
+        PttKeyButton.Content = "Press a key or mouse button...  (Esc cancels)";
+        _capture.Start();
+    }
+
+    private void CaptureTick()
+    {
+        string? pressed = _input!.FindPressed();
+        if (!_captureArmed)
+        {
+            _captureArmed = pressed is null; // wait until everything is released first
+        }
+        else if (pressed is not null)
+        {
+            if (!_input.IsEscape(pressed))
+            {
+                _settings.PushToTalkKey = pressed;
+                _settings.Save();
+            }
+            StopCapture();
+            return;
+        }
+        if (Environment.TickCount64 > _captureEnds)
+        {
+            StopCapture();
+        }
+    }
+
+    private void StopCapture()
+    {
+        _capture.Stop();
+        _captureArmed = false;
+        ApplyVoiceMode();
     }
 
     private void LoadDevices()
@@ -72,7 +181,15 @@ public partial class MainWindow : Window
         StatusText.Text = "Connecting...";
         var client = new VoiceClient();
         client.Activity.Threshold = SensitivitySlider.Value;
-        client.Disconnected += msg => Dispatcher.UIThread.Post(async () => await LeaveAsync("Disconnected: " + msg));
+        client.PushToTalk = _settings.PushToTalk;
+        client.Disconnected += msg => Dispatcher.UIThread.Post(async () =>
+        {
+            // Leaving on purpose also closes the connection; only report drops of the live session.
+            if (ReferenceEquals(_client, client))
+            {
+                await LeaveAsync("Connection lost: " + msg);
+            }
+        });
         try
         {
             string? err = await client.ConnectAsync(ServerBox.Text ?? "", KeyBox.Text ?? "", NameBox.Text ?? "");
