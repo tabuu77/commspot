@@ -125,6 +125,10 @@ public partial class MainWindow : Window, ISettingsHost
         }
     }
 
+    Version? ISettingsHost.UpdateReady => _offer?.Version;
+
+    void ISettingsHost.InstallUpdate() => OnUpdate(null, new RoutedEventArgs());
+
     async Task<string> ISettingsHost.CheckForUpdatesNowAsync()
     {
         if (!SelfUpdate.Supported)
@@ -132,7 +136,7 @@ public partial class MainWindow : Window, ISettingsHost
             return "Updates only work in the downloaded app.";
         }
         await CheckForUpdateAsync();
-        return _offer is null ? "You're up to date." : $"Version {_offer.Version.ToString(3)} is ready. Use the gold button in the main window.";
+        return _offer is null ? "You're up to date." : $"Version {_offer.Version.ToString(3)} is ready.";
     }
 
     private static int ResolveDevice(bool input, string? saved)

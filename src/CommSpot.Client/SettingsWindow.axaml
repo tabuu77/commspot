@@ -85,6 +85,7 @@
         <TextBlock Classes="h2" Text="Updates"/>
         <TextBlock x:Name="VersionText" Foreground="#EDEDED"/>
         <Button x:Name="CheckUpdatesButton" Margin="0,12,0,0" Content="Check for updates"/>
+        <Button x:Name="InstallUpdateButton" IsVisible="False" Margin="0,8,0,0" Background="#FFFFFF" Foreground="#000000" FontWeight="SemiBold" Padding="16,8"/>
         <TextBlock x:Name="UpdateStatus" Classes="hint" Margin="0,8,0,0"/>
         <TextBlock Classes="hint" Margin="0,12,0,0" Text="The Comm-Spot checks automatically when it starts and every 6 hours. Updates are signed and verified before they install."/>
       </StackPanel>
