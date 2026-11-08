@@ -16,6 +16,8 @@ internal sealed class Settings
     public double MicVolume { get; set; } = 1;
     public double SpeakerVolume { get; set; } = 1;
     public int PushToTalkReleaseMs { get; set; } = 200;
+    public int ShareHeight { get; set; } = 1080;
+    public int ShareFps { get; set; } = 15;
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CommSpot", "settings.json");

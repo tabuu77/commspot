@@ -123,6 +123,45 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScreenShare_ReachesOnlyWatchers()
+    {
+        await using var a = new VoiceClient();
+        await using var b = new VoiceClient();
+        await using var c = new VoiceClient();
+        Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+        Assert.Null(await b.ConnectAsync(_url, Key, "Bob"));
+        Assert.Null(await c.ConnectAsync(_url, Key, "Carol"));
+        var bFrames = new System.Collections.Concurrent.ConcurrentQueue<byte[]>();
+        var cFrames = new System.Collections.Concurrent.ConcurrentQueue<byte[]>();
+        b.VideoFrameReceived += (_, f) => bFrames.Enqueue(f);
+        c.VideoFrameReceived += (_, f) => cFrames.Enqueue(f);
+        await Task.Delay(300);
+
+        var frame = new byte[60_000];
+        new Random(7).NextBytes(frame);
+
+        // Not sharing yet: the server drops video, and Bob can't watch someone who isn't live.
+        await b.WatchAsync(a.UserId);
+        Assert.Equal(0, a.SendVideoFrame(frame));
+
+        await a.SetSharingAsync(true);
+        await Task.Delay(200);
+        Assert.True(b.Members.Single(m => m.UserId == a.UserId).Sharing);
+        await b.WatchAsync(a.UserId);
+        await Task.Delay(100);
+        Assert.True(a.SendVideoFrame(frame) > 40);
+        await Task.Delay(500);
+
+        Assert.True(bFrames.TryDequeue(out var got), "Bob is watching and should get the frame.");
+        Assert.Equal(frame, got);
+        Assert.Empty(cFrames); // Carol isn't watching
+
+        await a.SetSharingAsync(false);
+        await Task.Delay(200);
+        Assert.Equal(0, b.Watching);
+    }
+
+    [Fact]
     public async Task WrongAccessKey_IsRejected()
     {
         await using var c = new VoiceClient();

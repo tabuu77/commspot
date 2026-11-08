@@ -50,6 +50,7 @@ needs end-to-end encryption, see section 9) and large DDoS (needs an upstream pr
   - Packets that fail authentication are dropped **before** any parsing or decoding.
   - Keys rotate on every rejoin and are wiped on disconnect.
 - The server decrypts and re-encrypts per recipient (hop-by-hop, not end-to-end).
+- **Screen sharing** uses the same keys and packet format with header version 2 (authenticated). Frames are JPEG, split into fragments. The server never decodes them: it forwards them only to members who chose to watch that sharer, only while the sharer is live, and limits each sharer to 1500 packets/s on its own token bucket, so video can't starve voice. Capture is Windows GDI (screens, or one window via PrintWindow); nothing is captured unless the user picks a source and clicks Go Live.
 
 ## 5. Accounts and sessions
 

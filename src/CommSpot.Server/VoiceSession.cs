@@ -12,6 +12,8 @@ internal sealed class VoiceSession : IDisposable
     private ulong _sendCounter;
     private double _tokens = VoiceConstants.MaxPacketsPerSecond;
     private long _lastRefillTicks = Environment.TickCount64;
+    private double _videoTokens = VoiceConstants.MaxVideoPacketsPerSecond;
+    private long _videoRefillTicks = Environment.TickCount64;
     private bool _disposed;
 
     public VoiceSession(string connectionId, int userId, uint sessionId, string name, byte[] key)
@@ -42,9 +44,13 @@ internal sealed class VoiceSession : IDisposable
     public uint SessionId { get; }
     public string Name { get; }
     public volatile bool Muted;
+    public volatile bool Sharing;
+
+    /// <summary>UserId whose screen this member watches, or 0.</summary>
+    public volatile int Watching;
     public IPEndPoint? Endpoint { get; private set; }
 
-    public Member ToMember() => new(UserId, Name, Muted);
+    public Member ToMember() => new(UserId, Name, Muted, Sharing);
 
     /// <summary>Token bucket: refuse floods before spending CPU on decryption.</summary>
     public bool TryTakeToken()
@@ -60,6 +66,24 @@ internal sealed class VoiceSession : IDisposable
                 return false;
             }
             _tokens -= 1;
+            return true;
+        }
+    }
+
+    /// <summary>Separate, larger bucket for screen share packets so video can't starve voice or be used to flood.</summary>
+    public bool TryTakeVideoToken()
+    {
+        lock (_gate)
+        {
+            long now = Environment.TickCount64;
+            _videoTokens = Math.Min(VoiceConstants.MaxVideoPacketsPerSecond,
+                _videoTokens + (now - _videoRefillTicks) / 1000.0 * VoiceConstants.MaxVideoPacketsPerSecond);
+            _videoRefillTicks = now;
+            if (_videoTokens < 1)
+            {
+                return false;
+            }
+            _videoTokens -= 1;
             return true;
         }
     }
@@ -85,12 +109,12 @@ internal sealed class VoiceSession : IDisposable
         }
     }
 
-    public int Seal(ReadOnlySpan<byte> plaintext, Span<byte> destination)
+    public int Seal(ReadOnlySpan<byte> plaintext, Span<byte> destination, byte version = VoiceConstants.Version)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            return _crypto.Seal(VoiceDirection.ServerToClient, SessionId, ++_sendCounter, plaintext, destination);
+            return _crypto.Seal(VoiceDirection.ServerToClient, SessionId, ++_sendCounter, plaintext, destination, version);
         }
     }
 

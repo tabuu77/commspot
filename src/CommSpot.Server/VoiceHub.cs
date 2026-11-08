@@ -59,11 +59,44 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
         await Clients.Others.SendAsync(HubNames.MemberMuted, session.UserId, muted).ConfigureAwait(false);
     }
 
+    public async Task SetSharing(bool sharing)
+    {
+        var session = room.ByConnection(Context.ConnectionId);
+        if (session is null || session.Sharing == sharing)
+        {
+            return;
+        }
+        session.Sharing = sharing;
+        if (!sharing)
+        {
+            foreach (var s in room.Sessions.Where(s => s.Watching == session.UserId))
+            {
+                s.Watching = 0;
+            }
+        }
+        await Clients.Others.SendAsync(HubNames.MemberSharing, session.UserId, sharing).ConfigureAwait(false);
+    }
+
+    /// <summary>Start watching a member's screen (0 = stop). Only a member who is sharing can be watched.</summary>
+    public void Watch(int userId)
+    {
+        var session = room.ByConnection(Context.ConnectionId);
+        if (session is null)
+        {
+            return;
+        }
+        session.Watching = userId != session.UserId && room.Sessions.Any(s => s.UserId == userId && s.Sharing) ? userId : 0;
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var removed = room.Remove(Context.ConnectionId);
         if (removed is not null)
         {
+            foreach (var s in room.Sessions.Where(s => s.Watching == removed.UserId))
+            {
+                s.Watching = 0;
+            }
             await Clients.Others.SendAsync(HubNames.MemberLeft, removed.UserId).ConfigureAwait(false);
         }
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
