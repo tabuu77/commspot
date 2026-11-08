@@ -23,6 +23,12 @@ internal interface ISettingsHost
     void DevicesChanged();
 
     Task<string> CheckForUpdatesNowAsync();
+
+    /// <summary>The newer version that's ready to install, or null.</summary>
+    Version? UpdateReady { get; }
+
+    /// <summary>Downloads, verifies and installs the update, then restarts the app.</summary>
+    void InstallUpdate();
 }
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The mic test engine is disposed in StopMicTest, which runs on Closed.")]
@@ -99,7 +105,15 @@ public partial class SettingsWindow : Window
             UpdateStatus.Text = "Checking...";
             UpdateStatus.Text = await _host.CheckForUpdatesNowAsync();
             CheckUpdatesButton.IsEnabled = true;
+            ShowUpdate();
         };
+        InstallUpdateButton.Click += (_, _) =>
+        {
+            InstallUpdateButton.IsEnabled = false;
+            InstallUpdateButton.Content = "Updating... the app will restart";
+            _host.InstallUpdate();
+        };
+        ShowUpdate();
         Closed += (_, _) =>
         {
             _meter.Stop();
@@ -110,6 +124,15 @@ public partial class SettingsWindow : Window
             _s.Save();
             _host.SettingsChanged();
         };
+    }
+
+    private void ShowUpdate()
+    {
+        if (_host.UpdateReady is { } v)
+        {
+            InstallUpdateButton.Content = $"Update to {v.ToString(3)} and restart";
+            InstallUpdateButton.IsVisible = true;
+        }
     }
 
     private void Changed(Action apply)
