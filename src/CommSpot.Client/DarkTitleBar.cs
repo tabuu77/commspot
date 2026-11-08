@@ -3,7 +3,7 @@ using Avalonia.Controls;
 
 namespace CommSpot.Client;
 
-/// <summary>Makes the Windows title bar black. Other systems keep their own title bar.</summary>
+/// <summary>The app icon on every window, and a black Windows title bar. Other systems keep their own title bar.</summary>
 internal static partial class DarkTitleBar
 {
     private const int UseImmersiveDarkMode = 20;
@@ -15,8 +15,13 @@ internal static partial class DarkTitleBar
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
+    private static readonly Lazy<WindowIcon> Icon = new(() =>
+        new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://CommSpot/Assets/CommSpot.ico"))));
+
+    /// <summary>Sets the app icon and, on Windows, the black title bar.</summary>
     public static void Apply(Window window)
     {
+        window.Icon = Icon.Value;
         if (!OperatingSystem.IsWindows())
         {
             return;
