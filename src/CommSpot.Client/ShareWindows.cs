@@ -107,6 +107,12 @@ internal sealed class ScreenViewerWindow : Window
     /// <summary>Called from the network thread. Decodes off the UI thread; if still busy, the frame is skipped.</summary>
     public void ShowFrame(byte[] jpeg)
     {
+        // Check the size in the header first: never decode an image too big to be a real screen.
+        if (!Core.JpegInfo.TryReadSize(jpeg, out int w, out int h)
+            || w > Protocol.VoiceConstants.MaxVideoDimension || h > Protocol.VoiceConstants.MaxVideoDimension)
+        {
+            return;
+        }
         if (Interlocked.Exchange(ref _decoding, 1) == 1)
         {
             return;

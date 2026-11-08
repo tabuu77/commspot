@@ -100,7 +100,14 @@ internal sealed partial class UdpRelay(Room room, IOptions<ServerOptions> option
                 continue; // video only goes to members watching this sharer
             }
             int n = target.Seal(forward.AsSpan(0, fwdLen), outPacket, version);
-            await _socket!.SendToAsync(outPacket.AsMemory(0, n), SocketFlags.None, ep).ConfigureAwait(false);
+            try
+            {
+                await _socket!.SendToAsync(outPacket.AsMemory(0, n), SocketFlags.None, ep).ConfigureAwait(false);
+            }
+            catch (SocketException)
+            {
+                // One unreachable member must never stop the relay for everyone else.
+            }
         }
     }
 

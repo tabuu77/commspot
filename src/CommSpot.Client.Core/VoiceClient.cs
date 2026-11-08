@@ -418,9 +418,9 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         {
             return; // malformed Opus
         }
-        catch (IndexOutOfRangeException)
+        catch (Exception ex) when (ex is IndexOutOfRangeException or InvalidOperationException or Concentus.OpusException)
         {
-            return;
+            return; // a bad packet from another member must not stop voice
         }
         if (samples != VoiceConstants.FrameSamples)
         {

@@ -11,6 +11,9 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
 {
     private const string Generic = "Could not join.";
 
+    /// <summary>Only members who joined with the key get room events; a bare connection hears nothing.</summary>
+    internal const string RoomGroup = "room";
+
     public async Task<JoinResult> Join(JoinRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -33,14 +36,19 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
             return Fail("Name must be 1-32 letters, numbers, spaces, - _ or .");
         }
 
+        if (room.Sessions.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Fail("Someone here already has that name.");
+        }
         var session = room.Add(Context.ConnectionId, name, opts.MaxMembers);
         if (session is null)
         {
             return Fail("Room is full or you already joined.");
         }
 
+        await Groups.AddToGroupAsync(Context.ConnectionId, RoomGroup).ConfigureAwait(false);
         var others = room.Sessions.Where(s => s.UserId != session.UserId).Select(s => s.ToMember()).ToList();
-        await Clients.Others.SendAsync(HubNames.MemberJoined, session.ToMember()).ConfigureAwait(false);
+        await Clients.OthersInGroup(RoomGroup).SendAsync(HubNames.MemberJoined, session.ToMember()).ConfigureAwait(false);
         LogJoined(log, session.UserId, ip);
 
         int port = await relay.BoundPort.ConfigureAwait(false);
@@ -56,7 +64,7 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
             return;
         }
         session.Muted = muted;
-        await Clients.Others.SendAsync(HubNames.MemberMuted, session.UserId, muted).ConfigureAwait(false);
+        await Clients.OthersInGroup(RoomGroup).SendAsync(HubNames.MemberMuted, session.UserId, muted).ConfigureAwait(false);
     }
 
     public async Task SetSharing(bool sharing)
@@ -74,7 +82,7 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
                 s.Watching = 0;
             }
         }
-        await Clients.Others.SendAsync(HubNames.MemberSharing, session.UserId, sharing).ConfigureAwait(false);
+        await Clients.OthersInGroup(RoomGroup).SendAsync(HubNames.MemberSharing, session.UserId, sharing).ConfigureAwait(false);
     }
 
     /// <summary>Start watching a member's screen (0 = stop). Only a member who is sharing can be watched.</summary>
@@ -97,7 +105,7 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
             {
                 s.Watching = 0;
             }
-            await Clients.Others.SendAsync(HubNames.MemberLeft, removed.UserId).ConfigureAwait(false);
+            await Clients.OthersInGroup(RoomGroup).SendAsync(HubNames.MemberLeft, removed.UserId).ConfigureAwait(false);
         }
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }
