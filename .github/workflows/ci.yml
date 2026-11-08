@@ -21,3 +21,40 @@ jobs:
         run: dotnet build CommSpot.sln -c Release
       - name: Test
         run: dotnet test CommSpot.sln -c Release --no-build
+
+  windows-installer:
+    # Builds the Windows app and its installer on real Windows, so a broken installer is caught before merge.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish and build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet publish src/CommSpot.Client -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:DebugType=none -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out\win
+          if ($LASTEXITCODE -ne 0) { throw "publish failed" }
+          Get-ChildItem out\win | Format-Table Name, Length
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup install failed" }
+          }
+          & $iscc "/DAppVersion=0.0.0" "/DSourceDir=$PWD\out\win" "/DOutputDir=$PWD\dist" installer\CommSpot.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+          # Silent per-user install, check the files, then uninstall.
+          $p = Start-Process dist\CommSpot-Setup-x64.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/TASKS=desktopicon" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "install failed: $($p.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\CommSpot"
+          if (-not (Test-Path "$app\CommSpot.exe")) { throw "CommSpot.exe not installed" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\The Comm-Spot.lnk")) { throw "Start menu shortcut missing" }
+          $un = Get-ChildItem "$app\unins*.exe" | Select-Object -First 1
+          $p = Start-Process $un.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "uninstall failed: $($p.ExitCode)" }
+          Start-Sleep -Seconds 10
+          if (Test-Path "$app\CommSpot.exe") { throw "uninstall left CommSpot.exe behind" }
+          Write-Host "Installer OK"

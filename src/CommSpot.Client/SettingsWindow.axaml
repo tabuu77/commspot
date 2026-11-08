@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CommSpot.Client.SettingsWindow"
-        Title="CommSpot Settings" Width="640" Height="560" MinWidth="520" MinHeight="460"
-        Background="#1B1714" WindowStartupLocation="CenterOwner">
+        Title="The Comm-Spot Settings" Width="640" Height="560" MinWidth="520" MinHeight="460"
+        Background="#000000" WindowStartupLocation="CenterOwner">
   <Window.Styles>
     <Style Selector="TabItem">
       <Setter Property="FontSize" Value="16"/>
@@ -11,15 +11,19 @@
     <Style Selector="TextBlock.h2">
       <Setter Property="FontSize" Value="20"/>
       <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Foreground" Value="#F2B544"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
       <Setter Property="Margin" Value="0,0,0,8"/>
     </Style>
     <Style Selector="TextBlock.label">
-      <Setter Property="Foreground" Value="#B8A99A"/>
+      <Setter Property="Foreground" Value="#A6A6A6"/>
       <Setter Property="Margin" Value="0,12,0,4"/>
     </Style>
+    <Style Selector="TextBlock.body">
+      <Setter Property="Foreground" Value="#EDEDED"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
     <Style Selector="TextBlock.hint">
-      <Setter Property="Foreground" Value="#8C7F73"/>
+      <Setter Property="Foreground" Value="#7A7A7A"/>
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
@@ -55,7 +59,7 @@
           <TextBlock Classes="label" Text="Input sensitivity"/>
           <CheckBox x:Name="AutoSensitivityBox" Content="Automatically adjust input sensitivity"/>
           <Slider x:Name="SensitivitySlider" Minimum="40" Maximum="1200" Value="180"/>
-          <TextBlock Classes="hint" Text="Voice activity mode only. Move left if your words get cut off, right if background noise gets through."/>
+          <TextBlock Classes="hint" Text="Voice activate mode only. Move left if your words get cut off, right if background noise gets through."/>
         </StackPanel>
       </ScrollViewer>
     </TabItem>
@@ -65,7 +69,7 @@
         <StackPanel>
           <TextBlock Classes="h2" Text="Push to Talk"/>
           <TextBlock Classes="label" Text="Input mode"/>
-          <RadioButton x:Name="VadRadio" GroupName="mode" Content="Voice activity"/>
+          <RadioButton x:Name="VadRadio" GroupName="mode" Content="Voice activate"/>
           <RadioButton x:Name="PttRadio" GroupName="mode" Content="Push to talk"/>
           <TextBlock Classes="label" Text="Push to talk keybind"/>
           <Button x:Name="PttKeyButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Set key"/>
@@ -79,11 +83,41 @@
     <TabItem Header="Updates">
       <StackPanel Margin="16,0">
         <TextBlock Classes="h2" Text="Updates"/>
-        <TextBlock x:Name="VersionText" Foreground="#EDE3D9"/>
+        <TextBlock x:Name="VersionText" Foreground="#EDEDED"/>
         <Button x:Name="CheckUpdatesButton" Margin="0,12,0,0" Content="Check for updates"/>
         <TextBlock x:Name="UpdateStatus" Classes="hint" Margin="0,8,0,0"/>
-        <TextBlock Classes="hint" Margin="0,12,0,0" Text="CommSpot checks automatically when it starts and every 6 hours. Updates are signed and verified before they install."/>
+        <TextBlock Classes="hint" Margin="0,12,0,0" Text="The Comm-Spot checks automatically when it starts and every 6 hours. Updates are signed and verified before they install."/>
       </StackPanel>
+    </TabItem>
+
+    <TabItem Header="Connection">
+      <StackPanel Margin="16,0">
+        <TextBlock Classes="h2" Text="Connection"/>
+        <TextBlock Classes="label" Text="Server"/>
+        <TextBox x:Name="ServerBox" MaxLength="253"/>
+        <TextBlock Classes="hint" Margin="0,6,0,0" Text="Leave this as commspot.net unless you've been told otherwise. It's used the next time you join."/>
+      </StackPanel>
+    </TabItem>
+
+    <TabItem Header="Security">
+      <ScrollViewer Padding="16,0">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="h2" Text="Security"/>
+          <TextBlock Classes="label" Text="Your voice and screen"/>
+          <TextBlock Classes="body" Text="Voice and screen sharing are encrypted with AES-256-GCM. You get a fresh random key every time you join, and it's thrown away when you leave. Tampered or replayed packets are dropped."/>
+          <TextBlock Classes="body" Text="This is encryption between you and the server, not end to end: the server unlocks each packet and locks it again for the others in the room. Nobody between you and the server can listen in."/>
+          <TextBlock Classes="label" Text="Signing in"/>
+          <TextBlock Classes="body" Text="Joining uses HTTPS (TLS 1.2 or newer). The access key is never saved on your computer; you type it each time."/>
+          <TextBlock Classes="label" Text="Updates"/>
+          <TextBlock Classes="body" Text="Every update is digitally signed (Ed25519). The app checks the signature, the file's size and its SHA-256 checksum before installing, and refuses older versions. The server doesn't hold the signing key, so even a hacked server can't push a fake update."/>
+          <TextBlock Classes="label" Text="Push to talk"/>
+          <TextBlock Classes="body" Text="Push to talk only checks whether your one chosen key is held down. Nothing you type is logged or sent. All keys are looked at only while you're picking a new one."/>
+          <TextBlock Classes="label" Text="Screen sharing"/>
+          <TextBlock Classes="body" Text="Nothing on your screen is captured until you pick a screen or window and click Go Live. It's sent only to people who click to watch, and stops the moment you stop sharing."/>
+          <TextBlock Classes="label" Text="The server"/>
+          <TextBlock Classes="body" Text="The website side sits behind Cloudflare, and the server has rate limits on joining and on voice and video traffic so nobody can flood the room."/>
+        </StackPanel>
+      </ScrollViewer>
     </TabItem>
   </TabControl>
 </Window>

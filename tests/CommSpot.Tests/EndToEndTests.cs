@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR.Client;
 using System.Net;
 using System.Net.Sockets;
 using CommSpot.Client.Core;
@@ -159,6 +160,48 @@ public sealed class EndToEndTests : IAsyncLifetime
         await a.SetSharingAsync(false);
         await Task.Delay(200);
         Assert.Equal(0, b.Watching);
+    }
+
+    [Theory]
+    [InlineData("not a host")]
+    [InlineData("http://")]
+    [InlineData("http://example.com")]
+    public async Task BadOrPlainHttpServerAddress_IsRefusedWithoutCrashing(string server)
+    {
+        await using var c = new VoiceClient();
+        var err = await c.ConnectAsync(server, Key, "Mallory");
+        Assert.NotNull(err);
+        Assert.False(c.Connected);
+    }
+
+    [Fact]
+    public async Task ConnectionWithoutKey_HearsNoRoomEvents()
+    {
+        await using var spy = new HubConnectionBuilder()
+            .WithUrl(new Uri(new Uri(_url), HubNames.Path)).Build();
+        int events = 0;
+        spy.On<Member>(HubNames.MemberJoined, _ => Interlocked.Increment(ref events));
+        spy.On<int>(HubNames.MemberLeft, _ => Interlocked.Increment(ref events));
+        spy.On<int, bool>(HubNames.MemberMuted, (_, _) => Interlocked.Increment(ref events));
+        await spy.StartAsync();
+
+        await using (var a = new VoiceClient())
+        {
+            Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+            await a.SetMutedAsync(true);
+            await Task.Delay(300);
+        }
+        await Task.Delay(300);
+        Assert.Equal(0, Volatile.Read(ref events));
+    }
+
+    [Fact]
+    public async Task DuplicateName_IsRefused()
+    {
+        await using var a = new VoiceClient();
+        await using var b = new VoiceClient();
+        Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+        Assert.NotNull(await b.ConnectAsync(_url, Key, "alice"));
     }
 
     [Fact]

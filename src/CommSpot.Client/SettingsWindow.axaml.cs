@@ -50,6 +50,7 @@ public partial class SettingsWindow : Window
     internal SettingsWindow(ISettingsHost host)
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
         _host = host;
         _s = host.Settings;
 
@@ -62,7 +63,8 @@ public partial class SettingsWindow : Window
         VadRadio.IsChecked = !_s.PushToTalk;
         PttRadio.IsChecked = _s.PushToTalk;
         ReleaseSlider.Value = _s.PushToTalkReleaseMs;
-        VersionText.Text = $"You're on CommSpot {SelfUpdate.Current.ToString(3)}.";
+        VersionText.Text = $"You're on The Comm-Spot {SelfUpdate.Current.ToString(3)}.";
+        ServerBox.Text = _s.Server;
         UpdateLabels();
         ShowKey();
         _loading = false;
@@ -79,6 +81,13 @@ public partial class SettingsWindow : Window
         });
         PttRadio.IsCheckedChanged += (_, _) => Changed(() => _s.PushToTalk = PttRadio.IsChecked == true);
         ReleaseSlider.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) Changed(() => _s.PushToTalkReleaseMs = (int)ReleaseSlider.Value); };
+        ServerBox.LostFocus += (_, _) =>
+        {
+            string server = (ServerBox.Text ?? "").Trim();
+            _s.Server = server.Length == 0 ? "commspot.net" : server;
+            ServerBox.Text = _s.Server;
+            _s.Save();
+        };
         PttKeyButton.Click += (_, _) => StartCapture();
         _capture.Tick += (_, _) => CaptureTick();
         MicTestButton.Click += (_, _) => ToggleMicTest();
@@ -96,6 +105,8 @@ public partial class SettingsWindow : Window
             _meter.Stop();
             _capture.Stop();
             StopMicTest();
+            string server = (ServerBox.Text ?? "").Trim();
+            _s.Server = server.Length == 0 ? "commspot.net" : server;
             _s.Save();
             _host.SettingsChanged();
         };
