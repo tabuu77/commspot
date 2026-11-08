@@ -33,7 +33,7 @@ public partial class MainWindow : Window, ISettingsHost
     public MainWindow()
     {
         InitializeComponent();
-        ServerBox.Text = _settings.Server;
+        DarkTitleBar.Apply(this);
         NameBox.Text = _settings.Name;
         if (_input is not null)
         {
@@ -47,7 +47,7 @@ public partial class MainWindow : Window, ISettingsHost
         }
         ApplySettings();
 
-        Title = $"CommSpot {SelfUpdate.Current.ToString(3)}";
+        Title = $"The Comm-Spot {SelfUpdate.Current.ToString(3)}";
         SelfUpdate.CleanupOld();
         UpdateButton.Click += OnUpdate;
         _updateTimer.Tick += async (_, _) => await CheckForUpdateAsync();
@@ -112,7 +112,7 @@ public partial class MainWindow : Window, ISettingsHost
             ? _settings.PushToTalkKey is { } k && _input is not null
                 ? $"Push to talk: hold {_input.Describe(k)} to talk."
                 : "Push to talk is on, but no key is set. Open Settings to pick one."
-            : "Voice activity: your mic sends when you speak.";
+            : "Voice activate: your mic sends when you speak.";
     }
 
     void ISettingsHost.SettingsChanged() => ApplySettings();
@@ -230,7 +230,7 @@ public partial class MainWindow : Window, ISettingsHost
         });
         try
         {
-            string? err = await client.ConnectAsync(ServerBox.Text ?? "", KeyBox.Text ?? "", NameBox.Text ?? "");
+            string? err = await client.ConnectAsync(_settings.Server, KeyBox.Text ?? "", NameBox.Text ?? "");
             if (err is not null)
             {
                 await client.DisposeAsync();
@@ -250,7 +250,6 @@ public partial class MainWindow : Window, ISettingsHost
 
         _client = client;
         KeyBox.Text = string.Empty; // don't keep the key in the UI
-        _settings.Server = ServerBox.Text ?? "commspot.net";
         _settings.Name = NameBox.Text ?? "";
         _settings.Save();
         ApplySettings();
@@ -340,7 +339,7 @@ public partial class MainWindow : Window, ISettingsHost
                 row.Children.Add(new TextBlock
                 {
                     Text = m.Name + (m.UserId == _client.UserId ? " (you)" : ""),
-                    Foreground = new SolidColorBrush(Color.Parse("#EDE3D9")),
+                    Foreground = new SolidColorBrush(Color.Parse("#EDEDED")),
                     VerticalAlignment = VerticalAlignment.Center,
                 });
                 if (m.Muted)
@@ -372,7 +371,7 @@ public partial class MainWindow : Window, ISettingsHost
             if (_dots.TryGetValue(m.UserId, out var dot))
             {
                 bool talking = !m.Muted && _client.IsSpeaking(m.UserId);
-                dot.Background = new SolidColorBrush(talking ? Color.Parse("#7BD389") : Color.Parse("#4A403A"));
+                dot.Background = new SolidColorBrush(talking ? Color.Parse("#7BD389") : Color.Parse("#3A3A3A"));
             }
         }
     }

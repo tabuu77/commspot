@@ -59,7 +59,9 @@ UDP: 7777,7778,50000
 | Screen share frames (JPEG) from server | AES-GCM auth, replay window, fragment bounds (max 1024 x 1359 B), newest-frame-only reassembly, decoded off the UI thread, max 4096 px per side, malformed frames skipped | v0.4 |
 | Voice packets from server | AES-GCM auth (server direction), replay window, size limit, then Opus decode | Step 1 |
 | Global key state (push-to-talk) | Only the bound key is read; local only, never sent | Step 3 (early) |
-| Server address typed by user | `https://` only; plain `http://` allowed for loopback only | Step 1 |
+| Server address (Settings > Connection) | `https://` only; plain `http://` allowed for loopback only. Saved in settings.json; empty falls back to commspot.net | Step 1, moved to Settings in v0.5 |
+| Windows installer (`CommSpot-Setup-x64.exe`) | Per-user Inno Setup, no admin, installs only `CommSpot.exe` to `%LOCALAPPDATA%\Programs\CommSpot`; listed in SHA256SUMS. Not code-signed (Windows SmartScreen will warn) | v0.5 |
+| Window title bar (Windows) | DwmSetWindowAttribute dark mode/caption color on our own window handle only | v0.5 |
 
 ## Third-party dependencies
 
@@ -71,3 +73,4 @@ UDP: 7777,7778,50000
 | Concentus | Opus codec (managed) | BSD-3-Clause |
 | BouncyCastle.Cryptography | Ed25519 update signatures | MIT |
 | xunit (tests only) | Tests | Apache-2.0 |
+| Inno Setup (build tool only, from Chocolatey on the CI runner) | Builds the Windows installer | Inno Setup License |

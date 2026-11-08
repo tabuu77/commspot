@@ -13,11 +13,12 @@ internal sealed record ShareChoice(ShareSource Source, int MaxHeight, int Fps);
 /// <summary>Pick what to share and how.</summary>
 internal sealed class ShareScreenWindow : Window
 {
-    private static readonly IBrush Bg = new SolidColorBrush(Color.Parse("#1B1714"));
-    private static readonly IBrush Label = new SolidColorBrush(Color.Parse("#B8A99A"));
+    private static readonly IBrush Bg = new SolidColorBrush(Color.Parse("#000000"));
+    private static readonly IBrush Label = new SolidColorBrush(Color.Parse("#A6A6A6"));
 
     public ShareScreenWindow(IReadOnlyList<ShareSource> sources, Settings settings)
     {
+        DarkTitleBar.Apply(this);
         Title = "Share your screen";
         Width = 520;
         Height = 520;
@@ -27,7 +28,7 @@ internal sealed class ShareScreenWindow : Window
         var list = new ListBox { ItemsSource = sources, Height = 280, SelectedIndex = sources.Count > 0 ? 0 : -1 };
         var quality = new ComboBox { ItemsSource = new[] { "720p", "1080p" }, SelectedIndex = settings.ShareHeight >= 1080 ? 1 : 0, HorizontalAlignment = HorizontalAlignment.Stretch };
         var fps = new ComboBox { ItemsSource = new[] { "5 fps", "15 fps", "30 fps" }, SelectedIndex = settings.ShareFps switch { <= 5 => 0, >= 30 => 2, _ => 1 }, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var go = new Button { Content = "Go Live", Background = new SolidColorBrush(Color.Parse("#F2B544")), Foreground = Bg, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, Padding = new Thickness(0, 10) };
+        var go = new Button { Content = "Go Live", Background = new SolidColorBrush(Color.Parse("#262626")), Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, Padding = new Thickness(0, 10) };
         var cancel = new Button { Content = "Cancel", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, Padding = new Thickness(0, 10) };
         go.Click += (_, _) =>
         {
@@ -80,7 +81,8 @@ internal sealed class ScreenViewerWindow : Window
 
     public ScreenViewerWindow(string sharerName)
     {
-        Title = $"{sharerName}'s screen - CommSpot";
+        DarkTitleBar.Apply(this);
+        Title = $"{sharerName}'s screen - The Comm-Spot";
         Width = 1100;
         Height = 660;
         Background = Brushes.Black;

@@ -82,9 +82,17 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
     /// </summary>
     public async Task<string?> ConnectAsync(string server, string accessKey, string displayName, CancellationToken ct = default)
     {
-        var hubUrl = server.Contains("://", StringComparison.Ordinal)
-            ? new Uri(new Uri(server), HubNames.Path)
-            : new Uri($"https://{server.Trim().TrimEnd('/')}{HubNames.Path}");
+        Uri hubUrl;
+        try
+        {
+            hubUrl = server.Contains("://", StringComparison.Ordinal)
+                ? new Uri(new Uri(server.Trim()), HubNames.Path)
+                : new Uri($"https://{server.Trim().TrimEnd('/')}{HubNames.Path}");
+        }
+        catch (UriFormatException)
+        {
+            return "That server address isn't valid. Check Settings > Connection.";
+        }
         bool loopback = IPAddress.TryParse(hubUrl.Host, out var ip) && IPAddress.IsLoopback(ip);
         if (hubUrl.Scheme != Uri.UriSchemeHttps && !loopback)
         {

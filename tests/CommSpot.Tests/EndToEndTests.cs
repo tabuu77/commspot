@@ -161,6 +161,18 @@ public sealed class EndToEndTests : IAsyncLifetime
         Assert.Equal(0, b.Watching);
     }
 
+    [Theory]
+    [InlineData("not a host")]
+    [InlineData("http://")]
+    [InlineData("http://example.com")]
+    public async Task BadOrPlainHttpServerAddress_IsRefusedWithoutCrashing(string server)
+    {
+        await using var c = new VoiceClient();
+        var err = await c.ConnectAsync(server, Key, "Mallory");
+        Assert.NotNull(err);
+        Assert.False(c.Connected);
+    }
+
     [Fact]
     public async Task WrongAccessKey_IsRejected()
     {

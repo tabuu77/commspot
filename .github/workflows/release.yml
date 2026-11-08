@@ -17,8 +17,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
@@ -43,7 +41,76 @@ jobs:
           tar -C out/server -czf dist/commspot-server-linux-x64.tar.gz .
           (cd out/win && zip -qr ../../dist/CommSpot-windows-x64.zip .)
           tar -C out/linux -czf dist/CommSpot-linux-x64.tar.gz .
-          (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+          cp out/win/CommSpot.exe installer-input.exe
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: win-exe
+          path: installer-input.exe
+          retention-days: 1
+
+  installer:
+    # Per-user Windows installer (Inno Setup), built from the exact exe in the zip.
+    needs: build
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: win-exe
+          path: in
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force out\win, dist | Out-Null
+          Move-Item in\installer-input.exe out\win\CommSpot.exe
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup install failed" }
+          }
+          $v = $env:TAG.TrimStart("v")
+          & $iscc "/DAppVersion=$v" "/DSourceDir=$PWD\out\win" "/DOutputDir=$PWD\dist" installer\CommSpot.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: installer
+          path: dist/CommSpot-Setup-x64.exe
+          retention-days: 1
+
+  release:
+    needs: [build, installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: installer
+          path: dist
+      - name: Checksums
+        run: (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
       - name: Signed update manifest
         env:
           COMMSPOT_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
@@ -58,5 +125,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "CommSpot $TAG" \
-            --notes "Server and desktop builds. Verify downloads against SHA256SUMS."
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "The Comm-Spot $TAG" \
+            --notes "Windows: run CommSpot-Setup-x64.exe (no admin needed). Server and desktop builds are also attached. Verify downloads against SHA256SUMS."
