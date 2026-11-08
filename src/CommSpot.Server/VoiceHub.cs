@@ -96,6 +96,54 @@ internal sealed partial class VoiceHub(Room room, JoinLimiter limiter, UdpRelay 
         session.Watching = userId != session.UserId && room.Sessions.Any(s => s.UserId == userId && s.Sharing) ? userId : 0;
     }
 
+    /// <summary>Room chat. Only members; length- and rate-limited; the server never stores it.</summary>
+    public async Task<string?> SendChat(string text)
+    {
+        var session = room.ByConnection(Context.ConnectionId);
+        if (session is null)
+        {
+            return "Join first.";
+        }
+        if (!ChatText.TryNormalize(text, out string clean))
+        {
+            return null;
+        }
+        if (!session.TryTakeChatToken())
+        {
+            return "Slow down a little.";
+        }
+        var msg = new ChatMessage(session.UserId, session.Name, clean, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        await Clients.Group(RoomGroup).SendAsync(HubNames.ChatMessage, msg).ConfigureAwait(false);
+        return null;
+    }
+
+    /// <summary>Private message to one member. Goes only to them, echoed to the sender; never stored on the server.</summary>
+    public async Task<string?> SendDirect(int toUserId, string text)
+    {
+        var session = room.ByConnection(Context.ConnectionId);
+        if (session is null)
+        {
+            return "Join first.";
+        }
+        var target = room.Sessions.FirstOrDefault(s => s.UserId == toUserId);
+        if (target is null || target.UserId == session.UserId)
+        {
+            return "They're not here right now.";
+        }
+        if (!ChatText.TryNormalize(text, out string clean))
+        {
+            return null;
+        }
+        if (!session.TryTakeChatToken())
+        {
+            return "Slow down a little.";
+        }
+        var msg = new DirectMessage(session.UserId, session.Name, target.UserId, target.Name, clean,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        await Clients.Clients(target.ConnectionId, session.ConnectionId).SendAsync(HubNames.DirectMessage, msg).ConfigureAwait(false);
+        return null;
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var removed = room.Remove(Context.ConnectionId);

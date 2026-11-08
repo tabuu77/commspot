@@ -75,3 +75,13 @@ UDP: 7777,7778,50000
 | BouncyCastle.Cryptography | Ed25519 update signatures | MIT |
 | xunit (tests only) | Tests | Apache-2.0 |
 | Inno Setup (build tool only, from Chocolatey on the CI runner) | Builds the Windows installer | Inno Setup License |
+
+## Text chat (v0.6)
+
+| Input | Validation | Notes |
+|---|---|---|
+| `SendChat(text)` | Joined members only; control and bidi-override characters stripped; max 2000 chars; 5-message burst then 1/s per member | Sent only to the `room` group; never stored or logged on the server |
+| `SendDirect(toUserId, text)` | Same checks; recipient must be in the room and not yourself | Delivered only to the recipient's connection, echoed to the sender |
+| `ChatMessage` / `DirectMessage` from server (client side) | Re-validated (text and names); DMs must be to or from this user; shown as plain selectable text (no links or markup) | History is saved only on the user's PC (`%APPDATA%\CommSpot\chats`, one file per conversation, newest 1000, damaged files ignored, file names derived from a hex key so a name can't escape the folder) |
+
+Known limits: private messages are identified by display name. Until accounts exist, someone who joins later under the same name (after the original person left) continues that conversation window. Messages are encrypted in transit (TLS) but readable by the server while relayed (hop-by-hop, same as voice).

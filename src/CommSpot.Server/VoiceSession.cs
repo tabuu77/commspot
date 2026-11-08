@@ -15,6 +15,11 @@ internal sealed class VoiceSession : IDisposable
     private double _videoTokens = VoiceConstants.MaxVideoPacketsPerSecond;
     private long _videoRefillTicks = Environment.TickCount64;
     private bool _disposed;
+    private double _chatTokens = ChatBurst;
+    private long _chatRefillTicks = Environment.TickCount64;
+
+    /// <summary>Text messages: a burst of 5, then one per second.</summary>
+    public const int ChatBurst = 5;
 
     public VoiceSession(string connectionId, int userId, uint sessionId, string name, byte[] key)
     {
@@ -84,6 +89,23 @@ internal sealed class VoiceSession : IDisposable
                 return false;
             }
             _videoTokens -= 1;
+            return true;
+        }
+    }
+
+    /// <summary>Token bucket for room chat and private messages, so nobody can flood the others.</summary>
+    public bool TryTakeChatToken()
+    {
+        lock (_gate)
+        {
+            long now = Environment.TickCount64;
+            _chatTokens = Math.Min(ChatBurst, _chatTokens + (now - _chatRefillTicks) / 1000.0);
+            _chatRefillTicks = now;
+            if (_chatTokens < 1)
+            {
+                return false;
+            }
+            _chatTokens -= 1;
             return true;
         }
     }

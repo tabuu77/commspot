@@ -205,6 +205,56 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RoomChat_ReachesEveryone_AndPrivateMessages_OnlyTheTwoOfThem()
+    {
+        await using var a = new VoiceClient();
+        await using var b = new VoiceClient();
+        await using var c = new VoiceClient();
+        Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+        Assert.Null(await b.ConnectAsync(_url, Key, "Bob"));
+        Assert.Null(await c.ConnectAsync(_url, Key, "Carol"));
+        var room = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var dms = new System.Collections.Concurrent.ConcurrentBag<string>();
+        foreach (var (cl, n) in new[] { (a, "a"), (b, "b"), (c, "c") })
+        {
+            cl.ChatReceived += m => room.Add($"{n}:{m.FromName}:{m.Text}");
+            cl.DirectReceived += m => dms.Add($"{n}:{m.FromName}>{m.ToName}:{m.Text}");
+        }
+        await Task.Delay(200);
+
+        Assert.Null(await a.SendChatAsync("  hi\u0007 all  "));
+        Assert.Null(await a.SendDirectAsync(b.UserId, "psst"));
+        await Task.Delay(400);
+
+        Assert.Equal(["a:Alice:hi all", "b:Alice:hi all", "c:Alice:hi all"], room.Order());
+        Assert.Equal(["a:Alice>Bob:psst", "b:Alice>Bob:psst"], dms.Order()); // Carol never sees it
+
+        Assert.NotNull(await a.SendDirectAsync(a.UserId, "me"));   // not to yourself
+        Assert.NotNull(await a.SendDirectAsync(9999, "ghost"));    // not to someone who isn't here
+        Assert.Null(await a.SendChatAsync(new string('x', 5000))); // long text is cut, not rejected
+        await Task.Delay(300);
+        Assert.Contains(room, r => r.StartsWith("b:Alice:", StringComparison.Ordinal) && r.Length == "b:Alice:".Length + ChatText.MaxLength);
+    }
+
+    [Fact]
+    public async Task Chat_IsRateLimited_AndNeedsJoin()
+    {
+        await using var a = new VoiceClient();
+        Assert.Null(await a.ConnectAsync(_url, Key, "Alice"));
+        var errors = new List<string?>();
+        for (int i = 0; i < 12; i++)
+        {
+            errors.Add(await a.SendChatAsync("spam " + i));
+        }
+        Assert.Contains(errors, e => e is not null);
+
+        await using var spy = new HubConnectionBuilder().WithUrl(new Uri(new Uri(_url), HubNames.Path)).Build();
+        await spy.StartAsync();
+        Assert.NotNull(await spy.InvokeAsync<string?>(HubNames.SendChat, "hello"));
+        Assert.NotNull(await spy.InvokeAsync<string?>(HubNames.SendDirect, a.UserId, "hello"));
+    }
+
+    [Fact]
     public async Task WrongAccessKey_IsRejected()
     {
         await using var c = new VoiceClient();

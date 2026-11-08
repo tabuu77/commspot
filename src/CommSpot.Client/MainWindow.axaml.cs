@@ -19,7 +19,7 @@ public partial class MainWindow : Window, ISettingsHost
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(120) };
     private readonly GlobalInput? _input = GlobalInput.Create();
     private readonly PushToTalkWatcher? _ptt;
-    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(15) };
     private UpdateOffer? _offer;
     private SettingsWindow? _settingsWindow;
 
@@ -34,6 +34,9 @@ public partial class MainWindow : Window, ISettingsHost
     public MainWindow()
     {
         InitializeComponent();
+        _roomChat = new ChatPanel("Message the room");
+        _roomChat.Send = text => SendSafeAsync(c => c.SendChatAsync(text));
+        RoomChatHost.Content = _roomChat;
         DarkTitleBar.Apply(this);
         NameBox.Text = _settings.Name;
         if (_input is not null)
@@ -68,6 +71,10 @@ public partial class MainWindow : Window, ISettingsHost
         Closing += async (_, _) =>
         {
             _settingsWindow?.Close();
+            foreach (var w in _dms.Values.ToList())
+            {
+                w.Close();
+            }
             _settings.Save();
             await LeaveAsync(null);
         };
@@ -181,7 +188,7 @@ public partial class MainWindow : Window, ISettingsHost
         {
             return; // offline or bad manifest: keep the current version, try again later
         }
-        if (_offer is not null)
+        if (_offer is not null && UpdateButton.IsEnabled)
         {
             UpdateButton.Content = $"Update to {_offer.Version.ToString(3)} available. Click to update and restart";
             UpdateButton.IsVisible = true;
@@ -220,6 +227,25 @@ public partial class MainWindow : Window, ISettingsHost
         _settingsWindow?.ResetMicTest();
         var client = new VoiceClient { Mic = _mic };
         client.VideoFrameReceived += (_, frame) => _viewer?.ShowFrame(frame);
+        client.ChatReceived += m => Dispatcher.UIThread.Post(() =>
+        {
+            var entry = new ChatEntry(m.FromName, m.Text, m.SentAt, m.FromUserId == client.UserId);
+            _chats.Append(ChatStore.Room, entry);
+            _roomChat.Add(entry);
+        });
+        client.DirectReceived += m => Dispatcher.UIThread.Post(() =>
+        {
+            bool mine = m.FromUserId == client.UserId;
+            string peer = mine ? m.ToName : m.FromName;
+            var entry = new ChatEntry(m.FromName, m.Text, m.SentAt, mine);
+            _chats.Append(ChatStore.Direct(peer), entry);
+            bool wasOpen = _dms.ContainsKey(peer.ToLowerInvariant());
+            var w = OpenDirect(peer, activate: false);
+            if (wasOpen)
+            {
+                w.Chat.Add(entry); // a new window already loaded it from history
+            }
+        });
         client.WatchEnded += _ => Dispatcher.UIThread.Post(() =>
         {
             _viewer?.Close();
@@ -262,6 +288,7 @@ public partial class MainWindow : Window, ISettingsHost
 
         JoinPanel.IsVisible = false;
         RoomPanel.IsVisible = true;
+        _roomChat.Show(_chats.Load(ChatStore.Room));
         _refresh.Start();
         RenderMembers();
     }
@@ -348,6 +375,13 @@ public partial class MainWindow : Window, ISettingsHost
                     Foreground = new SolidColorBrush(Color.Parse("#EDEDED")),
                     VerticalAlignment = VerticalAlignment.Center,
                 });
+                if (m.UserId != _client.UserId)
+                {
+                    string dmName = m.Name;
+                    var msg = new Button { Content = "Message", Padding = new Avalonia.Thickness(10, 2), VerticalAlignment = VerticalAlignment.Center };
+                    msg.Click += (_, _) => OpenDirect(dmName, activate: true);
+                    row.Children.Add(msg);
+                }
                 if (m.Muted)
                 {
                     row.Children.Add(new TextBlock { Text = "muted", Foreground = new SolidColorBrush(Color.Parse("#E07A5F")), VerticalAlignment = VerticalAlignment.Center });
@@ -383,6 +417,53 @@ public partial class MainWindow : Window, ISettingsHost
     }
 
     // ---- Screen sharing ----
+    // ---- Text chat ----
+    private readonly ChatStore _chats = new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CommSpot", "chats"));
+    private readonly ChatPanel _roomChat;
+    private readonly Dictionary<string, DirectMessageWindow> _dms = [];
+
+    private async Task<string?> SendSafeAsync(Func<VoiceClient, Task<string?>> send)
+    {
+        if (_client is not { } c)
+        {
+            return "Join the room first.";
+        }
+        try
+        {
+            return await send(c);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or Microsoft.AspNetCore.SignalR.HubException or TaskCanceledException)
+        {
+            return "Couldn't send. Check your connection.";
+        }
+    }
+
+    /// <summary>Opens (or brings up) the private chat with someone. Incoming messages open it without stealing focus.</summary>
+    private DirectMessageWindow OpenDirect(string name, bool activate)
+    {
+        string key = name.ToLowerInvariant();
+        if (_dms.TryGetValue(key, out var existing))
+        {
+            if (activate)
+            {
+                existing.Activate();
+            }
+            return existing;
+        }
+        var w = new DirectMessageWindow(name) { ShowActivated = activate };
+        w.Chat.Show(_chats.Load(ChatStore.Direct(name)));
+        w.Chat.Send = text => SendSafeAsync(c =>
+        {
+            var to = c.Members.FirstOrDefault(m => m.UserId != c.UserId && string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+            return to is null ? Task.FromResult<string?>($"{name} isn't in the room right now.") : c.SendDirectAsync(to.UserId, text);
+        });
+        w.Closed += (_, _) => _dms.Remove(key);
+        _dms[key] = w;
+        w.Show();
+        return w;
+    }
+
     private ScreenSharer? _sharer;
     private ScreenViewerWindow? _viewer;
 

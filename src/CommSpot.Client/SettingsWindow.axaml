@@ -87,7 +87,7 @@
         <Button x:Name="CheckUpdatesButton" Margin="0,12,0,0" Content="Check for updates"/>
         <Button x:Name="InstallUpdateButton" IsVisible="False" Margin="0,8,0,0" Background="#FFFFFF" Foreground="#000000" FontWeight="SemiBold" Padding="16,8"/>
         <TextBlock x:Name="UpdateStatus" Classes="hint" Margin="0,8,0,0"/>
-        <TextBlock Classes="hint" Margin="0,12,0,0" Text="The Comm-Spot checks automatically when it starts and every 6 hours. Updates are signed and verified before they install."/>
+        <TextBlock Classes="hint" Margin="0,12,0,0" Text="The Comm-Spot checks automatically when it starts and every 15 minutes. Updates are signed and verified before they install."/>
       </StackPanel>
     </TabItem>
 
@@ -107,6 +107,8 @@
           <TextBlock Classes="label" Text="Your voice and screen"/>
           <TextBlock Classes="body" Text="Voice and screen sharing are encrypted with AES-256-GCM. You get a fresh random key every time you join, and it's thrown away when you leave. Tampered or replayed packets are dropped."/>
           <TextBlock Classes="body" Text="This is encryption between you and the server, not end to end: the server unlocks each packet and locks it again for the others in the room. Nobody between you and the server can listen in."/>
+          <TextBlock Classes="label" Text="Text chat and private messages"/>
+          <TextBlock Classes="body" Text="Messages travel over the same encrypted HTTPS connection and go only to the room, or only to the one person for private messages. The server passes them on and never saves them. Your chat history is saved only on this PC (in your user folder), so anyone who can sign in to your Windows account can read it."/>
           <TextBlock Classes="label" Text="Signing in"/>
           <TextBlock Classes="body" Text="Joining uses HTTPS (TLS 1.2 or newer). The access key is never saved on your computer; you type it each time."/>
           <TextBlock Classes="label" Text="Updates"/>

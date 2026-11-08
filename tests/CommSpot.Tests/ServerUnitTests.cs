@@ -67,6 +67,46 @@ public class ServerUnitTests
         Assert.False(CommSpot.Client.Core.JpegInfo.TryReadSize([], out _, out _));
     }
 
+    [Fact]
+    public void ChatText_CleansControlCharacters_AndLimitsLength()
+    {
+        Assert.True(CommSpot.Protocol.ChatText.TryNormalize(" a\u0000b\u202Ec\r\nd\te ", out string t));
+        Assert.Equal("abc\nd e", t); // control and text-direction characters are gone
+        Assert.False(CommSpot.Protocol.ChatText.TryNormalize("  \u0001 ", out _));
+        Assert.False(CommSpot.Protocol.ChatText.TryNormalize(null, out _));
+        Assert.True(CommSpot.Protocol.ChatText.TryNormalize(new string('y', 3000), out t));
+        Assert.Equal(CommSpot.Protocol.ChatText.MaxLength, t.Length);
+    }
+
+    [Fact]
+    public void ChatStore_SavesKeepsNewestAndSurvivesDamage()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "cs-chat-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new CommSpot.Client.Core.ChatStore(dir);
+            string key = CommSpot.Client.Core.ChatStore.Direct("Bob");
+            Assert.Equal(key, CommSpot.Client.Core.ChatStore.Direct(" bob "));
+            for (int i = 0; i < CommSpot.Client.Core.ChatStore.MaxEntries + 5; i++)
+            {
+                store.Append(key, new("Bob", "m" + i, i, false));
+            }
+            var list = store.Load(key);
+            Assert.Equal(CommSpot.Client.Core.ChatStore.MaxEntries, list.Count);
+            Assert.Equal("m5", list[0].Text);
+            File.WriteAllText(Path.Combine(dir, key + ".json"), "{not json");
+            Assert.Empty(store.Load(key));
+            Assert.Throws<ArgumentException>(() => store.Load("../evil"));
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
     private sealed class FakeTime : TimeProvider
     {
         private DateTimeOffset _now = DateTimeOffset.UnixEpoch;
