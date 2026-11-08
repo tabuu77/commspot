@@ -125,3 +125,62 @@ public sealed class MicProcessorTests
         Assert.True(vad.IsVoice(speech));
     }
 }
+
+public sealed class VideoAssemblerTests
+{
+    private static byte[] Frame(int n, int seed)
+    {
+        var f = new byte[n];
+        new Random(seed).NextBytes(f);
+        return f;
+    }
+
+    [Fact]
+    public void SplitThenAssemble_RoundTrips_InAnyOrder()
+    {
+        var f = Frame(20_000, 1);
+        var parts = CommSpot.Client.Core.VideoFragments.Split(5, f).Reverse().ToList();
+        var asm = new CommSpot.Client.Core.VideoAssembler();
+        byte[]? result = null;
+        foreach (var p in parts)
+        {
+            result ??= asm.Add(p);
+        }
+        Assert.Equal(f, result);
+    }
+
+    [Fact]
+    public void LostFragment_DropsOnlyThatFrame_AndOldFramesAreIgnored()
+    {
+        var asm = new CommSpot.Client.Core.VideoAssembler();
+        var f1 = CommSpot.Client.Core.VideoFragments.Split(1, Frame(5000, 1)).ToList();
+        var f2 = CommSpot.Client.Core.VideoFragments.Split(2, Frame(5000, 2)).ToList();
+        foreach (var p in f1.Skip(1))
+        {
+            Assert.Null(asm.Add(p)); // frame 1 is missing a piece
+        }
+        byte[]? got = null;
+        foreach (var p in f2)
+        {
+            got ??= asm.Add(p);
+        }
+        Assert.NotNull(got);
+        Assert.Null(asm.Add(f1[0])); // late piece of an older frame
+        foreach (var p in f2)
+        {
+            Assert.Null(asm.Add(p)); // replayed frame
+        }
+    }
+
+    [Fact]
+    public void MalformedFragments_AreIgnored()
+    {
+        var asm = new CommSpot.Client.Core.VideoAssembler();
+        Assert.Null(asm.Add([]));
+        Assert.Null(asm.Add(new byte[8]));
+        byte[] badCount = [0, 0, 0, 1, 0, 0, 0xFF, 0xFF, 1, 2, 3]; // 65535 fragments
+        Assert.Null(asm.Add(badCount));
+        byte[] badIndex = [0, 0, 0, 1, 0, 5, 0, 2, 1, 2, 3];      // index 5 of 2
+        Assert.Null(asm.Add(badIndex));
+    }
+}

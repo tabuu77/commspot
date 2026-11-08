@@ -60,6 +60,7 @@ public partial class MainWindow : Window, ISettingsHost
         SettingsButton.Click += (_, _) => OpenSettings();
         JoinButton.Click += OnJoin;
         MuteButton.Click += OnMute;
+        ShareButton.Click += OnShare;
         DeafenButton.Click += OnDeafen;
         LeaveButton.Click += async (_, _) => await LeaveAsync(null);
         _refresh.Tick += (_, _) => RenderMembers();
@@ -213,6 +214,12 @@ public partial class MainWindow : Window, ISettingsHost
         StatusText.Text = "Connecting...";
         _settingsWindow?.ResetMicTest();
         var client = new VoiceClient { Mic = _mic };
+        client.VideoFrameReceived += (_, frame) => _viewer?.ShowFrame(frame);
+        client.WatchEnded += _ => Dispatcher.UIThread.Post(() =>
+        {
+            _viewer?.Close();
+            StatusText.Text = "They stopped sharing.";
+        });
         client.Disconnected += msg => Dispatcher.UIThread.Post(async () =>
         {
             // Leaving on purpose also closes the connection; only report drops of the live session.
@@ -277,6 +284,11 @@ public partial class MainWindow : Window, ISettingsHost
 
     private async Task LeaveAsync(string? message)
     {
+        _sharer?.Dispose();
+        _sharer = null;
+        ShareButton.Content = "Share Screen";
+        _viewer?.Close();
+        _rendered = string.Empty;
         _settingsWindow?.ResetMicTest();
         _refresh.Stop();
         _audio?.Dispose();
@@ -298,34 +310,146 @@ public partial class MainWindow : Window, ISettingsHost
         }
     }
 
+    private readonly Dictionary<int, Border> _dots = [];
+    private string _rendered = string.Empty;
+
+    /// <summary>Rebuilds the member list only when it changes (so buttons stay clickable); updates talking dots every tick.</summary>
     private void RenderMembers()
     {
         if (_client is null)
         {
             return;
         }
-        MemberList.Children.Clear();
-        foreach (var m in _client.Members)
+        var members = _client.Members;
+        string sig = string.Join('|', members.Select(m => $"{m.UserId}:{m.Name}:{m.Muted}:{m.Sharing}")) + $"#{_client.Watching}";
+        if (sig != _rendered)
         {
-            bool talking = !m.Muted && _client.IsSpeaking(m.UserId);
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-            row.Children.Add(new Border
+            _rendered = sig;
+            MemberList.Children.Clear();
+            _dots.Clear();
+            foreach (var m in members)
             {
-                Width = 12, Height = 12, CornerRadius = new Avalonia.CornerRadius(6),
-                Background = new SolidColorBrush(talking ? Color.Parse("#7BD389") : Color.Parse("#4A403A")),
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            row.Children.Add(new TextBlock
-            {
-                Text = m.Name + (m.UserId == _client.UserId ? " (you)" : ""),
-                Foreground = new SolidColorBrush(Color.Parse("#EDE3D9")),
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            if (m.Muted)
-            {
-                row.Children.Add(new TextBlock { Text = "muted", Foreground = new SolidColorBrush(Color.Parse("#E07A5F")), VerticalAlignment = VerticalAlignment.Center });
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+                var dot = new Border
+                {
+                    Width = 12, Height = 12, CornerRadius = new Avalonia.CornerRadius(6),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                _dots[m.UserId] = dot;
+                row.Children.Add(dot);
+                row.Children.Add(new TextBlock
+                {
+                    Text = m.Name + (m.UserId == _client.UserId ? " (you)" : ""),
+                    Foreground = new SolidColorBrush(Color.Parse("#EDE3D9")),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                if (m.Muted)
+                {
+                    row.Children.Add(new TextBlock { Text = "muted", Foreground = new SolidColorBrush(Color.Parse("#E07A5F")), VerticalAlignment = VerticalAlignment.Center });
+                }
+                if (m.Sharing)
+                {
+                    row.Children.Add(new Border
+                    {
+                        Background = new SolidColorBrush(Color.Parse("#D64545")), CornerRadius = new Avalonia.CornerRadius(4),
+                        Padding = new Avalonia.Thickness(6, 1), VerticalAlignment = VerticalAlignment.Center,
+                        Child = new TextBlock { Text = "LIVE", FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brushes.White },
+                    });
+                    if (m.UserId != _client.UserId)
+                    {
+                        int id = m.UserId;
+                        string name = m.Name;
+                        var watch = new Button { Content = _client.Watching == id ? "Watching" : "Watch", Padding = new Avalonia.Thickness(10, 2), VerticalAlignment = VerticalAlignment.Center };
+                        watch.Click += async (_, _) => await WatchAsync(id, name);
+                        row.Children.Add(watch);
+                    }
+                }
+                MemberList.Children.Add(row);
             }
-            MemberList.Children.Add(row);
         }
+        foreach (var m in members)
+        {
+            if (_dots.TryGetValue(m.UserId, out var dot))
+            {
+                bool talking = !m.Muted && _client.IsSpeaking(m.UserId);
+                dot.Background = new SolidColorBrush(talking ? Color.Parse("#7BD389") : Color.Parse("#4A403A"));
+            }
+        }
+    }
+
+    // ---- Screen sharing ----
+    private ScreenSharer? _sharer;
+    private ScreenViewerWindow? _viewer;
+
+    private async void OnShare(object? sender, RoutedEventArgs e)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+        if (_sharer is not null)
+        {
+            await StopSharingAsync();
+            return;
+        }
+        if (!ScreenCapture.Supported)
+        {
+            StatusText.Text = "Sharing your screen works from Windows for now. You can still watch others.";
+            return;
+        }
+        var sources = ScreenCapture.ListSources(TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+        var choice = await new ShareScreenWindow(sources, _settings).ShowDialog<ShareChoice?>(this);
+        if (choice is null || _client is null)
+        {
+            return;
+        }
+        await _client.SetSharingAsync(true);
+        _sharer = new ScreenSharer(_client, choice.Source, choice.MaxHeight, choice.Fps);
+        _sharer.SourceLost += () => Dispatcher.UIThread.Post(async () =>
+        {
+            await StopSharingAsync();
+            StatusText.Text = "The shared window was closed, so sharing stopped.";
+        });
+        ShareButton.Content = $"Stop Sharing ({choice.Source.Name})";
+    }
+
+    private async Task StopSharingAsync()
+    {
+        _sharer?.Dispose();
+        _sharer = null;
+        ShareButton.Content = "Share Screen";
+        if (_client is { Sharing: true } c)
+        {
+            await c.SetSharingAsync(false);
+        }
+    }
+
+    private async Task WatchAsync(int userId, string name)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+        if (_client.Watching == userId && _viewer is not null)
+        {
+            _viewer.Activate();
+            return;
+        }
+        _viewer?.Close();
+        var viewer = new ScreenViewerWindow(name);
+        _viewer = viewer;
+        viewer.Closed += async (_, _) =>
+        {
+            if (ReferenceEquals(_viewer, viewer))
+            {
+                _viewer = null;
+                if (_client is { } c && c.Watching == userId)
+                {
+                    await c.WatchAsync(0);
+                }
+            }
+        };
+        await _client.WatchAsync(userId);
+        viewer.Show();
     }
 }

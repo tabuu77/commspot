@@ -24,8 +24,13 @@ public sealed class VoiceCrypto : IDisposable
     public static byte[] NewKey() => RandomNumberGenerator.GetBytes(VoiceConstants.KeySize);
 
     /// <summary>Writes a sealed packet into <paramref name="destination"/> and returns its length.</summary>
-    public int Seal(VoiceDirection direction, uint sessionId, ulong counter, ReadOnlySpan<byte> plaintext, Span<byte> destination)
+    public int Seal(VoiceDirection direction, uint sessionId, ulong counter, ReadOnlySpan<byte> plaintext, Span<byte> destination,
+        byte version = VoiceConstants.Version)
     {
+        if (version is not (VoiceConstants.Version or VoiceConstants.VideoVersion))
+        {
+            throw new ArgumentOutOfRangeException(nameof(version));
+        }
         if (plaintext.Length > VoiceConstants.MaxPayloadSize)
         {
             throw new ArgumentException("Payload too large.", nameof(plaintext));
@@ -36,7 +41,7 @@ public sealed class VoiceCrypto : IDisposable
             throw new ArgumentException("Destination too small.", nameof(destination));
         }
 
-        WriteHeader(destination, sessionId, counter);
+        WriteHeader(destination, version, sessionId, counter);
         Span<byte> nonce = stackalloc byte[12];
         WriteNonce(nonce, direction, counter);
 
@@ -85,13 +90,18 @@ public sealed class VoiceCrypto : IDisposable
     }
 
     /// <summary>Cheap structural check before any crypto: size bounds and version.</summary>
-    public static bool TryReadHeader(ReadOnlySpan<byte> packet, out uint sessionId, out ulong counter)
+    public static bool TryReadHeader(ReadOnlySpan<byte> packet, out uint sessionId, out ulong counter) =>
+        TryReadHeader(packet, out _, out sessionId, out counter);
+
+    /// <summary>Same, also returning the version (voice or video). The version is part of the authenticated header.</summary>
+    public static bool TryReadHeader(ReadOnlySpan<byte> packet, out byte version, out uint sessionId, out ulong counter)
     {
         sessionId = 0;
         counter = 0;
+        version = packet.Length > 0 ? packet[0] : (byte)0;
         if (packet.Length < VoiceConstants.HeaderSize + VoiceConstants.TagSize
             || packet.Length > VoiceConstants.MaxPacketSize
-            || packet[0] != VoiceConstants.Version)
+            || version is not (VoiceConstants.Version or VoiceConstants.VideoVersion))
         {
             return false;
         }
@@ -100,9 +110,9 @@ public sealed class VoiceCrypto : IDisposable
         return true;
     }
 
-    private static void WriteHeader(Span<byte> dest, uint sessionId, ulong counter)
+    private static void WriteHeader(Span<byte> dest, byte version, uint sessionId, ulong counter)
     {
-        dest[0] = VoiceConstants.Version;
+        dest[0] = version;
         BinaryPrimitives.WriteUInt32BigEndian(dest.Slice(1, 4), sessionId);
         BinaryPrimitives.WriteUInt64BigEndian(dest.Slice(5, 8), counter);
     }

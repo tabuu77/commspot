@@ -107,6 +107,19 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
                 MembersChanged?.Invoke();
             }
         });
+        _hub.On<int, bool>(HubNames.MemberSharing, (id, sharing) =>
+        {
+            if (_members.TryGetValue(id, out var m))
+            {
+                _members[id] = m with { Sharing = sharing };
+                if (!sharing && Watching == id)
+                {
+                    Watching = 0;
+                    WatchEnded?.Invoke(id);
+                }
+                MembersChanged?.Invoke();
+            }
+        });
         _hub.Closed += ex =>
         {
             Connected = false;
@@ -163,6 +176,67 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         {
             await _hub.InvokeAsync(HubNames.SetMuted, muted).ConfigureAwait(false);
         }
+    }
+
+    // ---- Screen sharing ----
+    private VideoAssembler _video = new();
+    private uint _videoFrameId;
+    private volatile int _watching;
+
+    /// <summary>The member whose screen you're watching, or 0.</summary>
+    public int Watching
+    {
+        get => _watching;
+        private set => _watching = value;
+    }
+
+    public bool Sharing { get; private set; }
+
+    /// <summary>A complete encoded frame (JPEG) from the member you're watching. Background thread.</summary>
+    public event Action<int, byte[]>? VideoFrameReceived;
+
+    /// <summary>The member you were watching stopped sharing or left.</summary>
+    public event Action<int>? WatchEnded;
+
+    public async Task SetSharingAsync(bool sharing)
+    {
+        Sharing = sharing;
+        if (_members.TryGetValue(UserId, out var me))
+        {
+            _members[UserId] = me with { Sharing = sharing };
+        }
+        MembersChanged?.Invoke();
+        if (_hub is { State: HubConnectionState.Connected })
+        {
+            await _hub.InvokeAsync(HubNames.SetSharing, sharing).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Watch a member's screen (0 stops watching).</summary>
+    public async Task WatchAsync(int userId)
+    {
+        Watching = userId;
+        _video = new VideoAssembler();
+        if (_hub is { State: HubConnectionState.Connected })
+        {
+            await _hub.InvokeAsync(HubNames.Watch, userId).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Sends one encoded frame to everyone watching you. Returns the number of packets sent.</summary>
+    public int SendVideoFrame(ReadOnlyMemory<byte> encoded)
+    {
+        if (!Connected || !Sharing)
+        {
+            return 0;
+        }
+        int n = 0;
+        foreach (var payload in VideoFragments.Split(++_videoFrameId, encoded))
+        {
+            SendSealed(payload, VoiceConstants.VideoVersion);
+            n++;
+        }
+        return n;
     }
 
     /// <summary>Feed exactly one 20 ms mono frame (960 samples at 48 kHz) from the microphone.</summary>
@@ -228,7 +302,7 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         Mic.WriteOut(acc, output);
     }
 
-    private void SendSealed(ReadOnlySpan<byte> payload)
+    private void SendSealed(ReadOnlySpan<byte> payload, byte version = VoiceConstants.Version)
     {
         if (_crypto is null || _udp is null)
         {
@@ -238,7 +312,7 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         int n;
         lock (_sendGate)
         {
-            n = _crypto.Seal(VoiceDirection.ClientToServer, _sessionId, ++_sendCounter, payload, packet);
+            n = _crypto.Seal(VoiceDirection.ClientToServer, _sessionId, ++_sendCounter, payload, packet, version);
         }
         try
         {
@@ -292,7 +366,7 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
     // A malicious or broken server is untrusted input too: same checks as the server applies.
     private void HandlePacket(ReadOnlySpan<byte> packet, Span<byte> plain)
     {
-        if (!VoiceCrypto.TryReadHeader(packet, out uint sid, out ulong counter) || sid != _sessionId)
+        if (!VoiceCrypto.TryReadHeader(packet, out byte version, out uint sid, out ulong counter) || sid != _sessionId)
         {
             return;
         }
@@ -311,6 +385,18 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         int sender = BinaryPrimitives.ReadInt32BigEndian(plain);
         if (sender == UserId || !_members.ContainsKey(sender))
         {
+            return;
+        }
+        if (version == VoiceConstants.VideoVersion)
+        {
+            if (sender == Watching)
+            {
+                var frame = _video.Add(plain[VoiceConstants.SenderIdSize..len]);
+                if (frame is not null)
+                {
+                    VideoFrameReceived?.Invoke(sender, frame);
+                }
+            }
             return;
         }
         var peer = _peers.GetOrAdd(sender, _ => new Peer());

@@ -9,9 +9,12 @@ public static class HubNames
     public const string MemberJoined = "MemberJoined";
     public const string MemberLeft = "MemberLeft";
     public const string MemberMuted = "MemberMuted";
+    public const string SetSharing = "SetSharing";
+    public const string Watch = "Watch";
+    public const string MemberSharing = "MemberSharing";
 }
 
-public sealed record Member(int UserId, string Name, bool Muted);
+public sealed record Member(int UserId, string Name, bool Muted, bool Sharing = false);
 
 public sealed record JoinRequest(string AccessKey, string DisplayName);
 

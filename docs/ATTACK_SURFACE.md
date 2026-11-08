@@ -20,7 +20,7 @@ UDP: 7777,7778,50000
 | 80, 443/tcp | nginx (shared) | **Cloudflare IPs only** | TLS; app auth behind it | Not in the scan allowlist because direct scans must see it closed |
 | 7777/udp | Metal Covenant game | Internet | Game's own | Not CommSpot's |
 | 7778/udp | Metal Covenant test | Internet, only during tests | Game's own | Not CommSpot's |
-| 50000/udp | CommSpot voice relay | Internet | AES-GCM per session | Drops in order: bad size/header, unknown session, over 60 pkt/s, failed auth, replay. Max 1400 B |
+| 50000/udp | CommSpot voice relay | Internet | AES-GCM per session | Drops in order: bad size/header, unknown session, over 60 pkt/s (voice) or 1500 pkt/s and not sharing (screen share), failed auth, replay. Max 1400 B. Screen share packets go only to members watching that sharer |
 
 ## Internal only (must NOT be reachable from outside)
 
@@ -45,6 +45,8 @@ UDP: 7777,7778,50000
 |---|---|---|---|---|
 | `/hub` | `Join(AccessKey, DisplayName)` | Shared access key (constant-time compare) | Name validated (1-32 chars, letters/digits/space/-_.); room max 10 | Step 1 |
 | `/hub` | `SetMuted(bool)` | Must have joined | Only changes the caller's own state | Step 1 |
+| `/hub` | `SetSharing(bool)` | Must have joined | Only the caller's own state; stopping clears everyone watching them | v0.4 |
+| `/hub` | `Watch(int userId)` | Must have joined | Only a member who is sharing (and not yourself); else 0 | v0.4 |
 
 ## Client-side inputs (things a malicious server or peer can send to the client)
 
@@ -54,6 +56,7 @@ UDP: 7777,7778,50000
 | Update archive | Signed size + SHA-256, only the app exe allowed inside, 300 MB cap | v0.2 |
 | Downloaded app files | SHA-256 must match signed manifest | Step 0 (design) |
 | Hub events (`MemberJoined/Left/Muted`) | Typed records; names shown as plain text | Step 1 |
+| Screen share frames (JPEG) from server | AES-GCM auth, replay window, fragment bounds (max 1024 x 1359 B), newest-frame-only reassembly, decoded off the UI thread, max 4096 px per side, malformed frames skipped | v0.4 |
 | Voice packets from server | AES-GCM auth (server direction), replay window, size limit, then Opus decode | Step 1 |
 | Global key state (push-to-talk) | Only the bound key is read; local only, never sent | Step 3 (early) |
 | Server address typed by user | `https://` only; plain `http://` allowed for loopback only | Step 1 |

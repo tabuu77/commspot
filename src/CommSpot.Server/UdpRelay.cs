@@ -61,12 +61,13 @@ internal sealed partial class UdpRelay(Room room, IOptions<ServerOptions> option
     private async Task HandleAsync(ReadOnlyMemory<byte> packet, IPEndPoint from, byte[] plain, byte[] forward, byte[] outPacket)
     {
         // 1. Structure (cheap). 2. Known session. 3. Rate limit. 4. AES-GCM auth. 5. Replay. Only then use it.
-        if (!VoiceCrypto.TryReadHeader(packet.Span, out uint sessionId, out _))
+        if (!VoiceCrypto.TryReadHeader(packet.Span, out byte version, out uint sessionId, out _))
         {
             return;
         }
         var sender = room.BySession(sessionId);
-        if (sender is null || !sender.TryTakeToken())
+        bool video = version == VoiceConstants.VideoVersion;
+        if (sender is null || (video ? !sender.Sharing || !sender.TryTakeVideoToken() : !sender.TryTakeToken()))
         {
             return;
         }
@@ -74,9 +75,13 @@ internal sealed partial class UdpRelay(Room room, IOptions<ServerOptions> option
         {
             return;
         }
-        if (len == 0 || sender.Muted)
+        if (len == 0 || (!video && sender.Muted))
         {
             return; // keepalive, or muted member
+        }
+        if (video && len <= VoiceConstants.VideoFragmentHeader)
+        {
+            return;
         }
 
         BinaryPrimitives.WriteInt32BigEndian(forward, sender.UserId);
@@ -89,11 +94,12 @@ internal sealed partial class UdpRelay(Room room, IOptions<ServerOptions> option
 
         foreach (var target in room.Sessions)
         {
-            if (target.UserId == sender.UserId || target.Endpoint is not { } ep)
+            if (target.UserId == sender.UserId || target.Endpoint is not { } ep
+                || (video && target.Watching != sender.UserId))
             {
-                continue;
+                continue; // video only goes to members watching this sharer
             }
-            int n = target.Seal(forward.AsSpan(0, fwdLen), outPacket);
+            int n = target.Seal(forward.AsSpan(0, fwdLen), outPacket, version);
             await _socket!.SendToAsync(outPacket.AsMemory(0, n), SocketFlags.None, ep).ConfigureAwait(false);
         }
     }
