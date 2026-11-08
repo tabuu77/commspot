@@ -12,6 +12,45 @@ public static class HubNames
     public const string SetSharing = "SetSharing";
     public const string Watch = "Watch";
     public const string MemberSharing = "MemberSharing";
+    public const string SendChat = "SendChat";
+    public const string SendDirect = "SendDirect";
+    public const string ChatMessage = "ChatMessage";
+    public const string DirectMessage = "DirectMessage";
+}
+
+/// <summary>A room chat message. <see cref="SentAt"/> is the server's clock, in Unix milliseconds.</summary>
+public sealed record ChatMessage(int FromUserId, string FromName, string Text, long SentAt);
+
+/// <summary>A private message between two members. Sent to the recipient and echoed to the sender.</summary>
+public sealed record DirectMessage(int FromUserId, string FromName, int ToUserId, string ToName, string Text, long SentAt);
+
+public static class ChatText
+{
+    public const int MaxLength = 2000;
+
+    /// <summary>Trims, drops control and text-direction characters (keeps new lines; tabs become spaces) and limits the length. False if nothing is left.</summary>
+    public static bool TryNormalize(string? raw, out string text)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (char ch in (raw ?? string.Empty).Trim())
+        {
+            // Bidi overrides/isolates could make a message display as something else ("spoofing"); drop them.
+            if (ch is '\u202A' or '\u202B' or '\u202C' or '\u202D' or '\u202E' or '\u2066' or '\u2067' or '\u2068' or '\u2069' or '\u200E' or '\u200F')
+            {
+                continue;
+            }
+            if (ch is '\n' or '\t' || !char.IsControl(ch))
+            {
+                sb.Append(ch == '\t' ? ' ' : ch);
+            }
+        }
+        text = sb.ToString().Replace("\r", "", StringComparison.Ordinal);
+        if (text.Length > MaxLength)
+        {
+            text = text[..MaxLength];
+        }
+        return text.Length > 0;
+    }
 }
 
 public sealed record Member(int UserId, string Name, bool Muted, bool Sharing = false);

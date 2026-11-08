@@ -100,6 +100,22 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
         }
 
         _hub = new HubConnectionBuilder().WithUrl(hubUrl).Build();
+        _hub.On<ChatMessage>(HubNames.ChatMessage, m =>
+        {
+            if (m is not null && ChatText.TryNormalize(m.Text, out string t) && DisplayNames.TryNormalize(m.FromName, out string n))
+            {
+                ChatReceived?.Invoke(m with { Text = t, FromName = n });
+            }
+        });
+        _hub.On<DirectMessage>(HubNames.DirectMessage, m =>
+        {
+            if (m is not null && (m.ToUserId == UserId || m.FromUserId == UserId)
+                && ChatText.TryNormalize(m.Text, out string t)
+                && DisplayNames.TryNormalize(m.FromName, out string f) && DisplayNames.TryNormalize(m.ToName, out string to))
+            {
+                DirectReceived?.Invoke(m with { Text = t, FromName = f, ToName = to });
+            }
+        });
         _hub.On<Member>(HubNames.MemberJoined, m => { _members[m.UserId] = m; MembersChanged?.Invoke(); });
         _hub.On<int>(HubNames.MemberLeft, id =>
         {
@@ -205,6 +221,32 @@ public sealed class VoiceClient : IAsyncDisposable, IAudioSink
 
     /// <summary>The member you were watching stopped sharing or left.</summary>
     public event Action<int>? WatchEnded;
+
+    /// <summary>A room chat message arrived (background thread). Text is already cleaned and length-limited.</summary>
+    public event Action<ChatMessage>? ChatReceived;
+
+    /// <summary>A private message to or from this user arrived (background thread). Your own sends come back here too.</summary>
+    public event Action<DirectMessage>? DirectReceived;
+
+    /// <summary>Sends to the whole room. Returns an error to show, or null.</summary>
+    public async Task<string?> SendChatAsync(string text)
+    {
+        if (_hub is not { State: HubConnectionState.Connected })
+        {
+            return "Not connected.";
+        }
+        return await _hub.InvokeAsync<string?>(HubNames.SendChat, text).ConfigureAwait(false);
+    }
+
+    /// <summary>Sends a private message. Returns an error to show, or null.</summary>
+    public async Task<string?> SendDirectAsync(int toUserId, string text)
+    {
+        if (_hub is not { State: HubConnectionState.Connected })
+        {
+            return "Not connected.";
+        }
+        return await _hub.InvokeAsync<string?>(HubNames.SendDirect, toUserId, text).ConfigureAwait(false);
+    }
 
     public async Task SetSharingAsync(bool sharing)
     {

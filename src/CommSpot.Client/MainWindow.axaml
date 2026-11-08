@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CommSpot.Client.MainWindow"
-        Title="The Comm-Spot" Width="460" Height="640" MinWidth="380" MinHeight="520"
+        Title="The Comm-Spot" Width="480" Height="820" MinWidth="380" MinHeight="600"
         Background="#000000">
   <Window.Styles>
     <Style Selector="TextBlock.h1">
@@ -47,9 +47,9 @@
     </ScrollViewer>
 
     <!-- In the room -->
-    <Grid Grid.Row="1" x:Name="RoomPanel" IsVisible="False" Margin="0,16,0,0" RowDefinitions="Auto,*,Auto,Auto,Auto">
+    <Grid Grid.Row="1" x:Name="RoomPanel" IsVisible="False" Margin="0,16,0,0" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
       <TextBlock Grid.Row="0" Classes="label" Margin="0,0,0,8" Text="At the bar"/>
-      <Border Grid.Row="1" Background="#141414" CornerRadius="8" Padding="12">
+      <Border Grid.Row="1" Background="#141414" CornerRadius="8" Padding="12" MinHeight="60" MaxHeight="170">
         <ScrollViewer>
           <StackPanel x:Name="MemberList" Spacing="8"/>
         </ScrollViewer>
@@ -66,8 +66,9 @@
           <Image x:Name="PreviewImage" Height="150" Stretch="Uniform"/>
         </StackPanel>
       </Border>
-      <TextBlock Grid.Row="3" x:Name="ModeHint" Foreground="#7A7A7A" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
-      <Grid Grid.Row="4" ColumnDefinitions="*,8,*,8,*" RowDefinitions="Auto,8,Auto" Margin="0,12,0,0">
+      <ContentControl Grid.Row="3" x:Name="RoomChatHost" Margin="0,10,0,0" MinHeight="160"/>
+      <TextBlock Grid.Row="4" x:Name="ModeHint" Foreground="#7A7A7A" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
+      <Grid Grid.Row="5" ColumnDefinitions="*,8,*,8,*" RowDefinitions="Auto,8,Auto" Margin="0,12,0,0">
         <Button Grid.Row="0" Grid.ColumnSpan="5" x:Name="ShareButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Share Screen"/>
         <Button Grid.Row="2" Grid.Column="0" x:Name="MuteButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Mute"/>
         <Button Grid.Row="2" Grid.Column="2" x:Name="DeafenButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Deafen"/>
