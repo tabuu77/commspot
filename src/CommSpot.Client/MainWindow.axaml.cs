@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommSpot.Client.Core;
 using PortAudioSharp;
@@ -289,6 +290,7 @@ public partial class MainWindow : Window, ISettingsHost
     {
         _sharer?.Dispose();
         _sharer = null;
+        HidePreview();
         ShareButton.Content = "Share Screen";
         _viewer?.Close();
         _rendered = string.Empty;
@@ -413,13 +415,63 @@ public partial class MainWindow : Window, ISettingsHost
             await StopSharingAsync();
             StatusText.Text = "The shared window was closed, so sharing stopped.";
         });
+        _sharer.PreviewFrame += ShowPreview;
         ShareButton.Content = $"Stop Sharing ({choice.Source.Name})";
+        PreviewLabel.Text = $"You're sharing {choice.Source.Name}";
+        PreviewPanel.IsVisible = true;
+    }
+
+    private int _previewDecoding;
+
+    /// <summary>Shows the sharer what they're streaming. Decodes off the UI thread and skips frames while busy.</summary>
+    private void ShowPreview(byte[] jpeg)
+    {
+        if (Interlocked.Exchange(ref _previewDecoding, 1) == 1)
+        {
+            return;
+        }
+        _ = Task.Run(() =>
+        {
+            Bitmap? bmp = null;
+            try
+            {
+                using var ms = new MemoryStream(jpeg, writable: false);
+                bmp = Bitmap.DecodeToWidth(ms, 480);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or NotSupportedException)
+            {
+                bmp = null;
+            }
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (bmp is not null && _sharer is not null)
+                {
+                    var old = PreviewImage.Source as Bitmap;
+                    PreviewImage.Source = bmp;
+                    old?.Dispose();
+                }
+                else
+                {
+                    bmp?.Dispose();
+                }
+                Interlocked.Exchange(ref _previewDecoding, 0);
+            });
+        });
+    }
+
+    private void HidePreview()
+    {
+        PreviewPanel.IsVisible = false;
+        var old = PreviewImage.Source as Bitmap;
+        PreviewImage.Source = null;
+        old?.Dispose();
     }
 
     private async Task StopSharingAsync()
     {
         _sharer?.Dispose();
         _sharer = null;
+        HidePreview();
         ShareButton.Content = "Share Screen";
         if (_client is { Sharing: true } c)
         {

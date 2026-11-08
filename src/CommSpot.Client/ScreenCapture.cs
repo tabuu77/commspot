@@ -334,11 +334,15 @@ internal sealed class ScreenSharer : IDisposable
     /// <summary>Raised (background thread) when the shared window disappears.</summary>
     public event Action? SourceLost;
 
+    /// <summary>Raised (background thread) a few times a second with the latest frame, for the sharer's own preview.</summary>
+    public event Action<byte[]>? PreviewFrame;
+
     private void Run()
     {
         int quality = _maxQuality;
         byte[]? last = null;
         long lastSent = 0;
+        long lastPreview = 0;
         var interval = TimeSpan.FromMilliseconds(1000.0 / _fps);
         while (!_cts.IsCancellationRequested)
         {
@@ -351,6 +355,11 @@ internal sealed class ScreenSharer : IDisposable
                     return;
                 }
                 byte[] jpeg = ScreenCapture.Encode(frame, _maxHeight, quality);
+                if (start - lastPreview >= 250)
+                {
+                    lastPreview = start;
+                    PreviewFrame?.Invoke(jpeg);
+                }
                 bool same = last is not null && jpeg.AsSpan().SequenceEqual(last);
                 // Unchanged screens are re-sent only every 2 s, so new watchers still get a picture.
                 if (!same || start - lastSent > 2000)
